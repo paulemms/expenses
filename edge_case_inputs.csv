@@ -1,0 +1,21 @@
+case_id,payer,amount,participants
+1,Alice,1000,Alice;Bob
+2,Alice,1000,Alice;Bob;Charlie
+3,Alice,300,Alice;Bob;Charlie
+4,Alice,100,Alice;Bob;Charlie;Dave
+5,Bob,500,Bob;Charlie
+6,Charlie,750,Charlie;Dave;Eve
+7,Alice,2000,Alice;Bob;Charlie
+8,Alice,0,Alice;Bob
+9,Alice,100,Alice
+10,Alice,1500,Alice;Bob;Charlie;Dave;Eve
+11,Alice,100,Alice;Bob
+12,Bob,100,Bob;Charlie
+13,Charlie,100,Charlie;Dave
+14,Dave,100,Dave;Alice
+15,Alice Müller,2000,Alice Müller;Böb;Çarlie
+16,Älice,1500,Älice;Böb;Çarlie
+17,Alice,1000000,Alice;Bob
+18,Alice,999,Alice;Bob;Charlie
+19,Alice,100,Alice;Bob
+20,Bob,200,Bob;Charlie;Dave
