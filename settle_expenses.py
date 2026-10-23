@@ -66,7 +66,7 @@ def settle_expenses(expenses):
         return []
 
     zero_sum_subsets = _find_max_zero_sum_subsets(non_zero_people, balances)
-    c = len(zero_sum_subsets)
+    # c = len(zero_sum_subsets)
 
     # --- 4. Generate payments --------------------------------------------
     payments = []
