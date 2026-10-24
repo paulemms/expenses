@@ -59,6 +59,9 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
             - "to": str
             - "amount": int
     """
+    if method not in ("auto", "exact", "heuristic"):
+        raise ValueError(f"Unknown method: {method!r}. Must be 'auto', 'exact', or 'heuristic'.")
+
     if not expenses:
         return []
 
@@ -90,10 +93,6 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
 
     if n == 0:
         return []
-
-    # Determine method
-    if method not in ("auto", "exact", "heuristic"):
-        raise ValueError(f"Unknown method: {method!r}. Must be 'auto', 'exact', or 'heuristic'.")
 
     if method == "auto":
         effective_method = "exact" if n <= _EXACT_THRESHOLD else "heuristic"
