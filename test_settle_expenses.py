@@ -199,8 +199,27 @@ class TestSettleExpenses(unittest.TestCase):
 
     def test_multiple_independent_cases(self):
         """Multiple independent cases in one CSV processed correctly."""
-        # This is tested via run_csv_tests.py, but we verify the grouping logic here
-        pass  # Covered by integration tests
+        csv_content = """case_id,payer,amount,participants
+1,Alice,100,Alice;Bob
+2,Charlie,200,Charlie;Dave
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(csv_content)
+            tmp_path = f.name
+
+        try:
+            expenses_by_case = parse_csv(tmp_path)
+            self.assertIn("1", expenses_by_case)
+            self.assertIn("2", expenses_by_case)
+            self.assertEqual(len(expenses_by_case["1"]), 1)
+            self.assertEqual(len(expenses_by_case["2"]), 1)
+
+            result_1 = settle_expenses(expenses_by_case["1"])
+            result_2 = settle_expenses(expenses_by_case["2"])
+            self.assertEqual(len(result_1), 1)
+            self.assertEqual(len(result_2), 1)
+        finally:
+            os.unlink(tmp_path)
 
 
 class TestValidateExpense(unittest.TestCase):

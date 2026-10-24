@@ -3,8 +3,34 @@ settle_expenses.py — Minimum-payment expense settlement algorithm.
 
 Given a list of expense dictionaries, computes each person's net balance
 and returns the globally minimum set of payments to settle all debts.
+
+Algorithm:
+    1. Compute net balances: paid minus owed for each person.
+       Uneven splits allocate remainder cents to earlier participants.
+    2. Find maximum disjoint zero-sum subsets of non-zero balances.
+       This uses brute-force enumeration of all 2^n subsets, then
+       greedy selection of smallest subsets first to maximise count c.
+    3. For each zero-sum subset of size k, settle with (k - 1) payments
+       using greedy largest-debtor-to-largest-creditor matching.
+    4. For remaining people (if any), settle with greedy matching.
+
+The minimum number of payments equals n - c, where n is the number of
+people with non-zero balances and c is the number of disjoint zero-sum
+subsets found. This formula holds because each zero-sum subset reduces
+the required payments by 1.
+
+Complexity:
+    Time:  O(2^n * n) in worst case due to subset enumeration.
+           Greedy matching within subsets is O(n^2).
+    Space: O(2^n) to store all zero-sum subsets.
+
+Limitations:
+    - Exponential time for large n (>20 people may be slow).
+    - The greedy subset selection is a heuristic; not provably optimal
+      for all inputs, though correct in practice for typical cases.
 """
 
+import csv
 from itertools import combinations
 
 
@@ -32,9 +58,8 @@ def settle_expenses(expenses):
     balances = {}
 
     for exp in expenses:
-        payer = exp["payer"]
-        amount = exp["amount"]
-        participants = exp["participants"]
+        payer, amount, participants = ( 
+            exp["payer"], exp["amount"], exp["participants"])
 
         # Payer gets credited for the full amount
         balances[payer] = balances.get(payer, 0) + amount
@@ -232,8 +257,6 @@ def parse_csv(csv_path):
         FileNotFoundError: If the CSV file doesn't exist.
         ValueError: If the CSV is invalid.
     """
-    import csv
-
     with open(csv_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
 
@@ -270,7 +293,7 @@ def parse_csv(csv_path):
                     expenses_by_case[case_id] = []
                 expenses_by_case[case_id].append(expense)
 
-            except (ValueError, TypeError, KeyError) as e:
+            except (ValueError, TypeError, KeyError, AttributeError) as e:
                 raise ValueError(f"Row {row_num}: {e}") from None
 
     return expenses_by_case
