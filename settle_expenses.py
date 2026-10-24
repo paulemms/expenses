@@ -2,14 +2,14 @@
 settle_expenses.py — Minimum-payment expense settlement algorithm.
 
 Given a list of expense dictionaries, computes each person's net balance
-and returns the globally minimum set of payments to settle all debts.
+and returns a near-minimum set of payments to settle all debts.
 
 Algorithm:
     1. Compute net balances: paid minus owed for each person.
        Uneven splits allocate remainder cents to earlier participants.
     2. Find maximum disjoint zero-sum subsets of non-zero balances.
-       This uses brute-force enumeration of all 2^n subsets, then
-       greedy selection of smallest subsets first to maximise count c.
+       For n <= 18, uses exact DP with bitmask enumeration (O(3^n)).
+       For n > 18, uses greedy heuristic (smallest subsets first).
     3. For each zero-sum subset of size k, settle with (k - 1) payments
        using greedy largest-debtor-to-largest-creditor matching.
     4. For remaining people (if any), settle with greedy matching.
@@ -20,36 +20,44 @@ subsets found. This formula holds because each zero-sum subset reduces
 the required payments by 1.
 
 Complexity:
-    Time:  O(2^n * n) in worst case due to subset enumeration.
+    Time:  O(3^n) for exact DP, O(2^n * n) for heuristic.
            Greedy matching within subsets is O(n^2).
-    Space: O(2^n) to store all zero-sum subsets.
+    Space: O(2^n) for DP table or subset storage.
 
 Limitations:
-    - Exponential time for large n (>20 people may be slow).
-    - The greedy subset selection is a heuristic; not provably optimal
-      for all inputs, though correct in practice for typical cases.
+    - Exact DP is limited to n <= 18 due to exponential complexity.
+    - Greedy heuristic is not provably optimal for all inputs.
 """
 
 import csv
 from itertools import combinations
+from typing import Dict, List
 
 
-def settle_expenses(expenses):
+Expense = Dict[str, object]
+Payment = Dict[str, object]
+Balances = Dict[str, int]
+
+_EXACT_THRESHOLD = 18
+
+
+def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payment]:
     """
-    Calculate the minimum number of payments required to settle a collection
-    of expenses.
+    Calculate a near-minimum set of payments required to settle expenses.
 
     Args:
-        expenses: A list of expense dictionaries, each with keys:
-            - "payer": str — person who paid
-            - "amount": int — total amount in cents
-            - "participants": list[str] — who shares the expense
+        expenses: A list of expense dictionaries with keys:
+            - "payer": str
+            - "amount": int
+            - "participants": List[str]
+        method: "heuristic" (greedy, fast), "exact" (DP, correct),
+                or "auto" (exact for n<=18, heuristic otherwise).
 
     Returns:
         A list of payment dictionaries with keys:
-            - "from": str — debtor
-            - "to": str — creditor
-            - "amount": int — cents transferred
+            - "from": str
+            - "to": str
+            - "amount": int
     """
     if not expenses:
         return []
@@ -58,13 +66,11 @@ def settle_expenses(expenses):
     balances = {}
 
     for exp in expenses:
-        payer, amount, participants = ( 
+        payer, amount, participants = (
             exp["payer"], exp["amount"], exp["participants"])
 
-        # Payer gets credited for the full amount
         balances[payer] = balances.get(payer, 0) + amount
 
-        # Each participant owes their share
         n = len(participants)
         base_share = amount // n
         remainder = amount % n
@@ -74,54 +80,55 @@ def settle_expenses(expenses):
             balances[person] = balances.get(person, 0) - share
 
     # --- 2. Filter to non-zero balances ----------------------------------
-    debtors = {p: b for p, b in balances.items() if b < 0}
-    creditors = {p: b for p, b in balances.items() if b > 0}
-
-    if not debtors and not creditors:
+    non_zero_balances = {p: b for p, b in balances.items() if b != 0}
+    if not non_zero_balances:
         return []
 
     # --- 3. Find maximum number of disjoint zero-sum subsets -------------
-    # Minimum transactions = n - c, where n = total non-zero people,
-    # c = max disjoint zero-sum subsets.
-    people = list(balances.keys())
-    non_zero_people = [p for p in people if balances[p] != 0]
-    n = len(non_zero_people)
+    people = list(non_zero_balances.keys())
+    n = len(people)
 
     if n == 0:
         return []
 
-    zero_sum_subsets = _find_max_zero_sum_subsets(non_zero_people, balances)
-    # c = len(zero_sum_subsets)
+    # Determine method
+    if method == "auto":
+        effective_method = "exact" if n <= _EXACT_THRESHOLD else "heuristic"
+    else:
+        effective_method = method
+
+    if effective_method == "exact":
+        zero_sum_groups = _find_max_zero_sum_subsets_exact(people, non_zero_balances)
+    else:
+        zero_sum_groups = _find_max_zero_sum_subsets_heuristic(people, non_zero_balances)
 
     # --- 4. Generate payments --------------------------------------------
     payments = []
 
-    # For each zero-sum subset, settle internally with (size-1) payments
-    remaining = set(non_zero_people)
-    for subset in zero_sum_subsets:
-        subset_payments = _settle_subset(subset, balances)
-        payments.extend(subset_payments)
-        remaining -= set(subset)
+    remaining = set(people)
+    for group in zero_sum_groups:
+        group_payments = _settle(group, non_zero_balances)
+        payments.extend(group_payments)
+        remaining -= set(group)
 
-    # For the remainder, use greedy matching
     if remaining:
-        remaining_payments = _greedy_settle(remaining, balances)
+        remaining_payments = _settle(remaining, non_zero_balances)
         payments.extend(remaining_payments)
 
     return payments
 
 
-def _settle_subset(subset, balances):
+def _settle(people, balances):
     """
-    Settle a zero-sum subset using a simple greedy internal approach.
-    Since the subset sums to zero, this always succeeds.
+    Settle debts for a group of people using greedy largest-debtor-to-largest-creditor.
+    Since the group sums to zero, this always succeeds.
     """
-    subset_balances = {p: balances[p] for p in subset}
+    balances_copy = {p: balances[p] for p in people}
     payments = []
 
     while True:
-        debtors = {p: b for p, b in subset_balances.items() if b < 0}
-        creditors = {p: b for p, b in subset_balances.items() if b > 0}
+        debtors = {p: b for p, b in balances_copy.items() if b < 0}
+        creditors = {p: b for p, b in balances_copy.items() if b > 0}
 
         if not debtors or not creditors:
             break
@@ -136,64 +143,23 @@ def _settle_subset(subset, balances):
             "amount": amount
         })
 
-        subset_balances[debtor] += amount
-        subset_balances[creditor] -= amount
+        balances_copy[debtor] += amount
+        balances_copy[creditor] -= amount
 
-        # Remove zero balances to shrink the subset
-        if subset_balances[debtor] == 0:
-            del subset_balances[debtor]
-        if subset_balances[creditor] == 0:
-            del subset_balances[creditor]
-
-    return payments
-
-
-def _greedy_settle(people, balances):
-    """
-    Greedy settlement for remaining people (not in zero-sum subsets).
-    Always match largest debtor with largest creditor.
-    """
-    remaining = {p: balances[p] for p in people}
-    payments = []
-
-    while True:
-        debtors = {p: b for p, b in remaining.items() if b < 0}
-        creditors = {p: b for p, b in remaining.items() if b > 0}
-
-        if not debtors or not creditors:
-            break
-
-        debtor = max(debtors, key=debtors.get)
-        creditor = max(creditors, key=creditors.get)
-
-        amount = min(-debtors[debtor], creditors[creditor])
-        payments.append({
-            "from": debtor,
-            "to": creditor,
-            "amount": amount
-        })
-
-        remaining[debtor] += amount
-        remaining[creditor] -= amount
-
-        if remaining[debtor] == 0:
-            del remaining[debtor]
-        if remaining[creditor] == 0:
-            del remaining[creditor]
+        if balances_copy[debtor] == 0:
+            del balances_copy[debtor]
+        if balances_copy[creditor] == 0:
+            del balances_copy[creditor]
 
     return payments
 
 
-def _find_max_zero_sum_subsets(people, balances):
+def _find_max_zero_sum_subsets_heuristic(people, balances):
     """
-    Find the maximum number of disjoint subsets whose balances sum to zero.
-    Uses backtracking with pruning for small inputs.
+    Greedy heuristic: enumerate all zero-sum subsets, pick smallest first.
+    Fast but not provably optimal.
     """
-    # Work with absolute values for subset sum logic
-    # Store balances as-is
     people_map = {p: balances[p] for p in people}
-
-    # Collect all possible zero-sum subsets
     zero_sum_subsets = []
 
     for size in range(1, len(people) + 1):
@@ -201,17 +167,67 @@ def _find_max_zero_sum_subsets(people, balances):
             if sum(people_map[p] for p in combo) == 0:
                 zero_sum_subsets.append(frozenset(combo))
 
-    # Sort by size (prefer smaller subsets to maximize count)
     zero_sum_subsets.sort(key=lambda s: len(s))
 
-    # Greedy selection of disjoint subsets
     selected = []
     used = set()
-
     for subset in zero_sum_subsets:
         if not subset & used:
             selected.append(set(subset))
             used |= subset
+
+    return selected
+
+
+def _find_max_zero_sum_subsets_exact(people, balances):
+    """
+    Exact DP: find maximum disjoint zero-sum subsets using bitmask DP.
+    O(3^n) time, O(2^n) space. Limited to n <= 18 in practice.
+    """
+    n = len(people)
+    person_to_idx = {p: i for i, p in enumerate(people)}
+    balance_list = [balances[p] for p in people]
+
+    # Precompute which masks sum to zero
+    zero_sum_masks = set()
+    for mask in range(1, 1 << n):
+        total = 0
+        for i in range(n):
+            if mask & (1 << i):
+                total += balance_list[i]
+        if total == 0:
+            zero_sum_masks.add(mask)
+
+    # DP: dp[mask] = max disjoint zero-sum subsets within mask
+    dp = [0] * (1 << n)
+    parent = [0] * (1 << n)  # track which subset was last added
+
+    for mask in range(1, 1 << n):
+        # Option 1: don't include lowest bit person in any subset
+        lowbit = mask & (-mask)
+        dp[mask] = dp[mask ^ lowbit]
+        parent[mask] = 0
+
+        # Option 2: try all zero-sum submasks that include lowbit
+        submask = (mask - 1) & mask
+        while submask > 0:
+            if submask & lowbit:  # must include lowbit to avoid duplicates
+                if submask in zero_sum_masks:
+                    value = dp[mask ^ submask] + 1
+                    if value > dp[mask]:
+                        dp[mask] = value
+                        parent[mask] = submask
+            submask = (submask - 1) & mask
+
+    # Reconstruct selected subsets
+    selected = []
+    mask = (1 << n) - 1
+    while mask > 0:
+        sub = parent[mask]
+        if sub == 0:
+            break
+        selected.append(frozenset(people[i] for i in range(n) if sub & (1 << i)))
+        mask ^= sub
 
     return selected
 
