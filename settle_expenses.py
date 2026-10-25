@@ -41,7 +41,7 @@ Balances = Dict[str, int]
 _EXACT_THRESHOLD = 18
 
 
-def net_balances(expenses: List[Expense]) -> Dict[str, int]:
+def net_balances(expenses: List[Expense]) -> Balances:
     """Compute net balances for each person from a list of expenses.
 
     Args:
@@ -63,6 +63,8 @@ def net_balances(expenses: List[Expense]) -> Dict[str, int]:
         n = len(participants)
         base_share = amount // n
         remainder = amount % n
+        
+        # Spread 1 cent over remainder participants
         for i, person in enumerate(participants):
             share = base_share + (1 if i < remainder else 0)
             balances[person] = balances.get(person, 0) - share
