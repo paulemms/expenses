@@ -395,5 +395,68 @@ class TestMinimumPayments(unittest.TestCase):
         self.assertEqual(len(result), 3)
 
 
+class TestNetBalances(unittest.TestCase):
+    """Tests for the net_balances function."""
+
+    def test_single_expense_two_people(self):
+        """Single expense between two people."""
+        expenses = [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]}]
+        balances = net_balances(expenses)
+        self.assertEqual(balances["Alice"], 50)
+        self.assertEqual(balances["Bob"], -50)
+
+    def test_single_expense_three_people(self):
+        """Single expense split among three people."""
+        expenses = [{"payer": "Alice", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]}]
+        balances = net_balances(expenses)
+        self.assertEqual(balances["Alice"], 100)
+        self.assertEqual(balances["Bob"], -100)
+        self.assertEqual(balances["Charlie"], -100)
+
+    def test_uneven_split(self):
+        """Uneven split distributes remainder to first participants."""
+        expenses = [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob", "Charlie"]}]
+        balances = net_balances(expenses)
+        # Alice pays 100, split as 34, 33, 33
+        # Alice: 100 - 34 = 66
+        # Bob: -33
+        # Charlie: -33
+        self.assertEqual(balances["Alice"], 66)
+        self.assertEqual(balances["Bob"], -33)
+        self.assertEqual(balances["Charlie"], -33)
+
+    def test_multiple_expenses(self):
+        """Multiple expenses accumulate correctly."""
+        expenses = [
+            {"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
+            {"payer": "Bob", "amount": 100, "participants": ["Alice", "Bob"]},
+        ]
+        balances = net_balances(expenses)
+        self.assertEqual(balances["Alice"], 0)
+        self.assertEqual(balances["Bob"], 0)
+
+    def test_payer_not_in_participants(self):
+        """Payer not in participants list."""
+        expenses = [{"payer": "Dave", "amount": 100, "participants": ["Alice", "Bob"]}]
+        balances = net_balances(expenses)
+        self.assertEqual(balances["Dave"], 100)
+        self.assertEqual(balances["Alice"], -50)
+        self.assertEqual(balances["Bob"], -50)
+
+    def test_zero_sum(self):
+        """Net balances should sum to zero."""
+        expenses = [
+            {"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob", "Charlie"]},
+            {"payer": "Bob", "amount": 200, "participants": ["Bob", "Charlie", "Dave"]},
+        ]
+        balances = net_balances(expenses)
+        self.assertEqual(sum(balances.values()), 0)
+
+    def test_empty_expenses(self):
+        """Empty expense list returns empty dict."""
+        balances = net_balances([])
+        self.assertEqual(balances, {})
+
+
 if __name__ == "__main__":
     unittest.main()
