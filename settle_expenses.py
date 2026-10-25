@@ -78,6 +78,7 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
         base_share = amount // n
         remainder = amount % n
 
+        # Distribute 1 cent to the first remainder participants
         for i, person in enumerate(participants):
             share = base_share + (1 if i < remainder else 0)
             balances[person] = balances.get(person, 0) - share
@@ -211,15 +212,18 @@ def _find_max_zero_sum_subsets_exact(people, balances):
         parent[mask] = 0
 
         # Option 2: try all zero-sum submasks that include lowbit
-        submask = (mask - 1) & mask
-        while submask > 0:
-            if submask & lowbit:  # must include lowbit to avoid duplicates
-                if submask in zero_sum_masks:
-                    value = dp[mask ^ submask] + 1
-                    if value > dp[mask]:
-                        dp[mask] = value
-                        parent[mask] = submask
-            submask = (submask - 1) & mask
+        rest = mask ^ lowbit
+        submask = rest
+        while True:
+            candidate = submask | lowbit
+            if candidate in zero_sum_masks:
+                value = dp[mask ^ candidate] + 1
+                if value > dp[mask]:
+                    dp[mask] = value
+                    parent[mask] = candidate
+            if submask == 0:
+                break
+            submask = (submask - 1) & rest
 
     # Reconstruct selected subsets
     selected = []
