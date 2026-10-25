@@ -1,7 +1,7 @@
 """Unit tests for exact method in settle_expenses.py."""
 
 import unittest
-from settle_expenses import settle_expenses
+from settle_expenses import settle_expenses, net_balances
 
 
 class TestExactMethod(unittest.TestCase):

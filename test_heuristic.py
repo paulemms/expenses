@@ -1,7 +1,7 @@
 """Unit tests for heuristic method in settle_expenses.py."""
 
 import unittest
-from settle_expenses import settle_expenses
+from settle_expenses import settle_expenses, net_balances
 
 
 class TestHeuristicMethod(unittest.TestCase):
