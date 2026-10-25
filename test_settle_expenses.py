@@ -3,7 +3,7 @@ Unit tests for settle_expenses.py
 """
 
 import unittest
-from settle_expenses import settle_expenses, validate_expense, parse_csv
+from settle_expenses import settle_expenses, validate_expense, parse_csv, net_balances
 import tempfile
 import os
 
@@ -107,18 +107,7 @@ class TestSettleExpenses(unittest.TestCase):
         ]
         result = settle_expenses(expenses)
 
-        balances = {}
-        for exp in expenses:
-            payer = exp["payer"]
-            amount = exp["amount"]
-            participants = exp["participants"]
-            balances[payer] = balances.get(payer, 0) + amount
-            n = len(participants)
-            base = amount // n
-            rem = amount % n
-            for i, person in enumerate(participants):
-                share = base + (1 if i < rem else 0)
-                balances[person] = balances.get(person, 0) - share
+        balances = net_balances(expenses)
 
         for p in result:
             balances[p["from"]] += p["amount"]
@@ -177,18 +166,7 @@ class TestSettleExpenses(unittest.TestCase):
         # Minimum: 2 payments (Bob→Alice: 34, Charlie→Alice: 100, then... wait that's 134, not 167)
         # Let me recalculate properly
 
-        balances = {}
-        for exp in expenses:
-            payer = exp["payer"]
-            amount = exp["amount"]
-            participants = exp["participants"]
-            balances[payer] = balances.get(payer, 0) + amount
-            n = len(participants)
-            base = amount // n
-            rem = amount % n
-            for i, person in enumerate(participants):
-                share = base + (1 if i < rem else 0)
-                balances[person] = balances.get(person, 0) - share
+        balances = net_balances(expenses)
 
         # Verify with the result
         for p in result:
@@ -413,18 +391,7 @@ class TestMinimumPayments(unittest.TestCase):
         ]
         result = settle_expenses(expenses)
         # Verify all balances are zero
-        balances = {}
-        for exp in expenses:
-            payer = exp["payer"]
-            amount = exp["amount"]
-            participants = exp["participants"]
-            balances[payer] = balances.get(payer, 0) + amount
-            n = len(participants)
-            base = amount // n
-            rem = amount % n
-            for i, person in enumerate(participants):
-                share = base + (1 if i < rem else 0)
-                balances[person] = balances.get(person, 0) - share
+        balances = net_balances(expenses)
 
         for p in result:
             balances[p["from"]] += p["amount"]

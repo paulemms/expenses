@@ -96,18 +96,7 @@ class TestExactMethod(unittest.TestCase):
         ]
         result = settle_expenses(expenses, method="exact")
 
-        balances = {}
-        for exp in expenses:
-            payer = exp["payer"]
-            amount = exp["amount"]
-            participants = exp["participants"]
-            balances[payer] = balances.get(payer, 0) + amount
-            n = len(participants)
-            base = amount // n
-            rem = amount % n
-            for i, person in enumerate(participants):
-                share = base + (1 if i < rem else 0)
-                balances[person] = balances.get(person, 0) - share
+        balances = net_balances(expenses)
 
         for p in result:
             balances[p["from"]] += p["amount"]
@@ -154,18 +143,7 @@ class TestExactMethod(unittest.TestCase):
         ]
         result = settle_expenses(expenses, method="exact")
 
-        balances = {}
-        for exp in expenses:
-            payer = exp["payer"]
-            amount = exp["amount"]
-            participants = exp["participants"]
-            balances[payer] = balances.get(payer, 0) + amount
-            n = len(participants)
-            base = amount // n
-            rem = amount % n
-            for i, person in enumerate(participants):
-                share = base + (1 if i < rem else 0)
-                balances[person] = balances.get(person, 0) - share
+        balances = net_balances(expenses)
 
         for p in result:
             balances[p["from"]] += p["amount"]

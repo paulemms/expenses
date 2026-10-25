@@ -1,7 +1,7 @@
 """Tests for cases where heuristic and exact methods differ."""
 
 import unittest
-from settle_expenses import settle_expenses
+from settle_expenses import settle_expenses, net_balances
 
 
 class TestHeuristicVsExact(unittest.TestCase):
@@ -40,18 +40,7 @@ class TestHeuristicVsExact(unittest.TestCase):
 
         result = settle_expenses(expenses, "exact")
 
-        balances = {}
-        for exp in expenses:
-            payer = exp["payer"]
-            amount = exp["amount"]
-            participants = exp["participants"]
-            balances[payer] = balances.get(payer, 0) + amount
-            n = len(participants)
-            base = amount // n
-            rem = amount % n
-            for i, person in enumerate(participants):
-                share = base + (1 if i < rem else 0)
-                balances[person] = balances.get(person, 0) - share
+        balances = net_balances(expenses)
 
         for p in result:
             balances[p["from"]] += p["amount"]

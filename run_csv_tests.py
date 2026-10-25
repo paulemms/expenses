@@ -3,7 +3,7 @@ run_csv_tests.py — Loads the CSV file and executes each test case.
 """
 
 import sys
-from settle_expenses import settle_expenses, parse_csv
+from settle_expenses import settle_expenses, parse_csv, net_balances
 
 
 def main():
@@ -38,18 +38,7 @@ def main():
                 print(f"  {p['from']} -> {p['to']}: {p['amount']} cents")
 
         # Verify all balances are zero
-        balances = {}
-        for exp in expenses:
-            payer = exp["payer"]
-            amount = exp["amount"]
-            participants = exp["participants"]
-            balances[payer] = balances.get(payer, 0) + amount
-            n = len(participants)
-            base = amount // n
-            rem = amount % n
-            for i, person in enumerate(participants):
-                share = base + (1 if i < rem else 0)
-                balances[person] = balances.get(person, 0) - share
+        balances = net_balances(expenses)
 
         for p in payments:
             balances[p["from"]] += p["amount"]

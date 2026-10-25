@@ -41,6 +41,34 @@ Balances = Dict[str, int]
 _EXACT_THRESHOLD = 18
 
 
+def net_balances(expenses: List[Expense]) -> Dict[str, int]:
+    """Compute net balances for each person from a list of expenses.
+
+    Args:
+        expenses: A list of expense dictionaries with keys:
+            - "payer": str
+            - "amount": int
+            - "participants": List[str]
+
+    Returns:
+        A dictionary mapping person names to their net balance
+        (positive = owed money, negative = owes money).
+    """
+    balances = {}
+    for exp in expenses:
+        payer = exp["payer"]
+        amount = exp["amount"]
+        participants = exp["participants"]
+        balances[payer] = balances.get(payer, 0) + amount
+        n = len(participants)
+        base_share = amount // n
+        remainder = amount % n
+        for i, person in enumerate(participants):
+            share = base_share + (1 if i < remainder else 0)
+            balances[person] = balances.get(person, 0) - share
+    return balances
+
+
 def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payment]:
     """
     Calculate a near-minimum set of payments required to settle expenses.
@@ -66,22 +94,7 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
         return []
 
     # --- 1. Compute net balances ----------------------------------------
-    balances = {}
-
-    for exp in expenses:
-        payer, amount, participants = (
-            exp["payer"], exp["amount"], exp["participants"])
-
-        balances[payer] = balances.get(payer, 0) + amount
-
-        n = len(participants)
-        base_share = amount // n
-        remainder = amount % n
-
-        # Distribute 1 cent to the first remainder participants
-        for i, person in enumerate(participants):
-            share = base_share + (1 if i < remainder else 0)
-            balances[person] = balances.get(person, 0) - share
+    balances = net_balances(expenses)
 
     # --- 2. Filter to non-zero balances ----------------------------------
     non_zero_balances = {p: b for p, b in balances.items() if b != 0}
