@@ -409,7 +409,9 @@ class TestNetBalances(unittest.TestCase):
         """Single expense split among three people."""
         expenses = [{"payer": "Alice", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]}]
         balances = net_balances(expenses)
-        self.assertEqual(balances["Alice"], 100)
+        # Alice pays 300, owes 100 each (remainder 0)
+        # Alice: 300 - 100 = 200
+        self.assertEqual(balances["Alice"], 200)
         self.assertEqual(balances["Bob"], -100)
         self.assertEqual(balances["Charlie"], -100)
 
