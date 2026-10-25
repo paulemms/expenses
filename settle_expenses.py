@@ -59,10 +59,11 @@ def net_balances(expenses: List[Expense]) -> Balances:
         payer = exp["payer"]
         amount = exp["amount"]
         participants = exp["participants"]
-        balances[payer] = balances.get(payer, 0) + amount
         n = len(participants)
-        base_share = amount // n
-        remainder = amount % n
+        if n == 0:
+            raise ValueError("No participants")
+        base_share, remainder = divmod(amount, n)
+        balances[payer] = balances.get(payer, 0) + amount
         
         # Spread 1 cent over remainder participants
         for i, person in enumerate(participants):
@@ -106,9 +107,6 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
     # --- 3. Find maximum number of disjoint zero-sum subsets -------------
     people = list(non_zero_balances.keys())
     n = len(people)
-
-    if n == 0:
-        return []
 
     if method == "auto":
         effective_method = "exact" if n <= _EXACT_THRESHOLD else "heuristic"
@@ -203,7 +201,6 @@ def _find_max_zero_sum_subsets_exact(people, balances):
     O(3^n) time, O(2^n) space. Limited to n <= 18 in practice.
     """
     n = len(people)
-    person_to_idx = {p: i for i, p in enumerate(people)}
     balance_list = [balances[p] for p in people]
 
     # Precompute which masks sum to zero
