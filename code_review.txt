@@ -1,0 +1,410 @@
+================================================================================
+CODE REVIEW - expenses (minimum-payment expense settlement)
+================================================================================
+
+Scope
+  Target: the whole module, because the working tree is clean and `git diff HEAD`
+  is empty, so the default "local diff" target would review nothing.
+  Reviewed: settle_expenses.py, run_csv_tests.py, test_settle_expenses.py,
+  test_heuristic_vs_exact.py, edge_case_inputs.csv, README.md, QWEN.md -
+  cross-checked against spec.md, which is the grading prompt, so spec
+  conformance matters as much as code quality.
+  HEAD at review time: a4ee130. Effort: medium.
+  Method: manual review (the bundled review pipeline is POSIX-shell based; this
+  session is on win32).
+
+Overall verdict
+  The implementation is well structured, clearly named, validated at the boundary
+  (validate_expense / parse_csv), and the exact bitmask DP is a genuinely good
+  solution for the small-n case. Net balances, uneven-split rounding and CSV
+  parsing all look correct and are covered by tests.
+
+  The dominant problem is NOT style - it is spec conformance. spec.md demands
+  the globally minimum number of payments, and the default configuration can
+  silently return a non-minimal answer. The checked-in test test_heuristic_vs_exact.py
+  is itself proof of that divergence, but the documented test command never runs it.
+
+  Nothing below was executed against the code during this review (plan mode was
+  active while the analysis was done). Findings marked [unverified] are code-reading
+  conclusions that need a run to confirm; treat them as "likely, confirm before
+  acting". Everything else is anchored to a line I read.
+
+  Order by impact: 1) spec conformance, 2) correctness risks, 3) performance,
+  4) test/doc gaps, 5) style.
+
+
+--------------------------------------------------------------------------------
+1. SPEC CONFORMANCE (highest impact)
+--------------------------------------------------------------------------------
+
+1.1 The default `auto` path violates the optimisation requirement for n > 18
+
+  settle_expenses.py:112
+      effective_method = "exact" if n <= _EXACT_THRESHOLD else "heuristic"
+
+  spec.md:231
+      "A greedy algorithm that produces valid payments but does not guarantee
+      the globally minimum number of payments does not satisfy the
+      optimisation requirement."
+
+  So for 19+ non-zero balances, the default call silently produces output the
+  spec declares non-compliant. It is silent: no warning, no exception, no
+  return-code signal, nothing in the output telling the caller the answer may
+  be suboptimal.
+
+  Worse, run_csv_tests.py calls settle_expenses(expenses) with no `method`
+  argument, so the primary documented entry point is the exposed path.
+
+  This is not a hypothetical. The repo ships test_heuristic_vs_exact.py, whose
+  test_heuristic_uses_more_payments asserts exactly this on a 9-person fixture:
+      len(exact_result)    == 6
+      len(heuristic_result) == 7
+  The author knew the heuristic is suboptimal and encoded it as a test. The
+  threshold at 18 then hands that known-bad algorithm to the default path
+  precisely when the input grows.
+
+  Options, in order of preference:
+    a) Make non-optimality an explicit decision rather than a silent fallback:
+       raise (or warn) when n > _EXACT_THRESHOLD under method="auto", so a
+       caller can never receive a non-minimal answer believing it is minimal.
+    b) Improve the algorithm's reach so the fallback rarely fires: the exact DP
+       is O(3^n) because it iterates all submasks of every mask. Pruning to
+       submasks that are themselves zero-sum and contain the low bit (the loop
+       already requires `submask | lowbit in zero_sum_masks`) plus iterating
+       only zero-sum masks cuts the constant a lot; n ~ 20-22 becomes realistic.
+       A meet-in-the-middle or branch-and-bound on the maximum-disjoint-zero-sum-
+       subset packing is the real fix for larger n.
+    c) At minimum, make the heuristic smarter (it currently takes smallest
+       zero-sum subsets first, which is exactly the greedy that loses in the
+       crafted case) and document the bound it does achieve.
+
+  Note also that spec.md:223 only mandates "no more than n - 1 payments for n
+  non-zero balances", which the greedy always satisfies. If the intent is to
+  honour only that clause, then the exact DP is over-engineered; but spec.md:231
+  and :391 both push the other way. Pick a position and make the code, docs and
+  tests agree with it. Currently they disagree.
+
+
+1.2 Documentation over-claims minimality
+
+  README.md:16
+      "... settles everyone - using the fewest payments possible."
+  Not true in the default configuration for n > 18 (see 1.1). Reword to
+  "the fewest payments possible for up to 18 non-zero balances", or fix the
+  behaviour and keep the claim.
+
+  Internal contradiction inside settle_expenses.py itself:
+      :5   module docstring says "near-minimum set of payments"
+      :77  settle_expenses docstring says "Calculate a near-minimum set..."
+      header/README say minimum / fewest possible.
+  The docstrings are the honest ones. Align the README to them, or state the
+  guarantee per method: `exact` => provably minimum; `heuristic` => not
+  guaranteed. spec.md:321 ("Payment ordering is not significant... Multiple
+  payment lists are acceptable if they settle all balances using the globally
+  minimum number of transfers") is the sentence to quote when you write that
+  contract down.
+
+
+--------------------------------------------------------------------------------
+2. CORRECTNESS RISKS
+--------------------------------------------------------------------------------
+
+2.1 Exact DP: reconstruction can truncate the answer  [unverified - confirm by running]
+
+  settle_expenses.py, _find_max_zero_sum_subsets_exact, reconstruction loop:
+      mask = (1 << n) - 1
+      while mask > 0:
+          sub = parent[mask]
+          if sub == 0:
+              break                                     # :245
+          selected.append(frozenset(people[i] for i in range(n) if sub & (1 << i)))
+          mask ^= sub
+
+  parent[mask] == 0 is a legitimate value meaning "the low-bit person joins
+  no zero-sum subset in the optimal packing", not "stop". When that happens on
+  a non-final mask, `break` discards the rest of the reconstruction, so
+  `selected` reports fewer subsets than `dp[full_mask]` was computed to contain.
+
+  Consequences: the count `c` used in "minimum payments = n - c" no longer matches
+  the emitted groups, and the people from the un-reconstructed remainder fall
+  through into the `remaining` bucket settled without zero-sum grouping - which
+  produces more payments than the DP believed were necessary. That makes the
+  DP's headline result look wrong even where its table is right.
+
+  Suggested fix: skip the low-bit person instead of stopping -
+      if sub == 0:
+          lowbit = mask & (-mask)
+          mask ^= lowbit
+          continue
+  and assert after reconstruction that the number of emitted subsets equals
+  dp[(1 << n) - 1], so this class of bug cannot regress silently. Add a test
+  that forces this branch (a case whose optimum excludes the first person from
+  every zero-sum subset).
+
+  I did not run the code, so I am not claiming this fires today; it is the
+  branch that the sentinel value makes reachable. Please verify before changing,
+  and keep the assertion regardless.
+
+
+2.2 _settle is called on a set that need not sum to zero
+
+  settle_expenses.py:140 (docstring)
+      "Since the group sums to zero, this always succeeds."
+
+  But settle_expenses calls it twice:
+      for group in zero_sum_groups:
+          group_payments = _settle(group, non_zero_balances)   # sums to zero: fine
+          ...
+      if remaining:
+          remaining_payments = _settle(remaining, non_zero_balances)   # NOT guaranteed zero-sum
+
+  `remaining` is `people - union(zero_sum_groups)`. If the selected groups do
+  not partition all zero-sum structure (which is exactly what 2.1 can cause, and
+  also what happens whenever the packing leaves a residue), `remaining`'s balances
+  do not sum to zero. _settle's loop exits via
+      if not debtors or not creditors: break
+  so it stops with residual balances silently un-settled. The returned payment
+  list then does not reconcile: net_balances + payments != 0 for some people.
+
+  Two things to fix:
+    - Make the invariant explicit. Either assert sum(balances) == 0 at the top
+      of _settle, or split into _settle_zero_sum(group) and a caller that
+      proves the whole instance sums to zero before settling the residue.
+      (The full instance does sum to zero by construction - every expense credits
+      amount and debits exactly amount across participants - so a residual
+      implies the grouping is wrong, which is a bug worth crashing on rather than
+      hiding.)
+    - Add a reconciliation check where settlement is produced: after building
+      `payments`, re-derive balances and assert they all land on zero; raise
+      with the offending people otherwise. A one-line invariant here would have
+      turned 2.1 from a silent wrong answer into a loud failure.
+
+  run_csv_tests.py does perform this verification loop and would have caught it
+  on the shipped CSVs - but only for those CSVs, and only at CLI level, not for
+  library callers or in unit tests.
+
+
+2.3 parse_csv: doubled "Row N:" prefix in error messages
+
+  settle_expenses.py:330
+      raise ValueError(f"Row {row_num}: {e}") from None
+  while the inner call already formats its message as
+      validate_expense(expense, row_num)  ->  "Row {row_num}: ..."
+
+  User-visible result: "Row 2: Row 2: Negative amount not allowed".
+
+  Worth noting for the record: the row numbering itself is correct. `row_num = 1`
+  with `# header is row 1`, incremented at the top of the data loop, makes the
+  first data row "Row 2", which matches the physical line number in the file and
+  matches test_settle_expenses.py's test_malformed_row, which asserts
+  self.assertIn("Row 2", str(cm.exception)). So the test passes today and would
+  keep passing after a fix - do not "fix" the numbering.
+
+  Fix by de-duplicating at one layer: have validate_expense raise bare messages
+  and let parse_csv own the prefix, or skip the re-wrap when the message already
+  starts with "Row ". Also consider surfacing the offending row's raw values
+  (case_id/payer/amount) in the message; for a 20-row CSV, "Row 9: ..." is
+  actionable, but for a 5000-row file it is not.
+
+
+--------------------------------------------------------------------------------
+3. PERFORMANCE
+--------------------------------------------------------------------------------
+
+3.1 The heuristic is O(2^n) and runs exactly when n is largest
+
+  settle_expenses.py:181
+      for size in range(1, len(people) + 1):
+          for combo in combinations(people, size):
+
+  This materialises every subset (2^n combinations, each building a frozenset and
+  hashing it) before the greedy selection, then sorts them. And it is dispatched
+  precisely when n > 18 (_EXACT_THRESHOLD, settle_expenses.py:112), i.e. in the
+  region where 2^n is worst: n = 25 is 33M subsets, n = 30 is 1B. The CLI therefore
+  does not degrade gracefully on bigger inputs - it stalls.
+
+  The docstring at :176 says "Fast but not provably optimal." The "Fast" is
+  misleading; it is fast only relative to the O(3^n) exact DP, and both are
+  exponential. Suggest renaming the framing to "suboptimal, still exponential
+  in n" and either adding a hard cap with a clear error, or replacing the
+  enumeration with a bounded approach (e.g. cap subset size at k, which is
+  polynomial in n for fixed k, or branch-and-bound with a node budget).
+
+  Also worth a cheap win: precompute prefix-sum-style subset enumeration only up
+  to the size that can improve the packing, and skip size-1 subsets - a single
+  person with non-zero balance is never zero-sum, so `range(2, len(people) + 1)`
+  removes n wasted combinations. Minor, but free and it makes the loop bounds
+  self-documenting.
+
+
+--------------------------------------------------------------------------------
+4. TESTS AND DOCS
+--------------------------------------------------------------------------------
+
+4.1 No test exercises the fallback path (n > 18)  - the biggest test gap
+
+  I read all 523 lines of test_settle_expenses.py and all of test_heuristic_vs_exact.py.
+  Neither constructs an instance with more than 18 non-zero balances. So:
+    - the `auto` -> heuristic switch at :112 has zero coverage;
+    - the exact DP's stated practical ceiling (n = 18) is untested at the boundary
+      (no n == 18 / n == 19 pair pinning the switch);
+    - edge_case_inputs.csv tops out well below 18 people, so even the CLI runner
+      never reaches the fallback in CI.
+  The parameterised suite in TestSettleExpensesMethods runs each scenario through
+  ("exact", "heuristic") and compares them via a canonical {(from, to): amount}
+  dict. That is good practice, but on every scenario it covers the two methods
+  agree - so it structurally cannot catch the divergence that
+  test_heuristic_vs_exact.py demonstrates. Add at least one n > 18 scenario with
+  an independently computed expected count (spec.md:391 requires minimality be
+  checked against "an independent reference method or known optimal" - the same
+  requirement applies to the fallback discussion).
+
+  Small, cheap tests worth adding now:
+    - n = 19 balances -> assert method="exact" raises rather than silently
+      downgrading (if you adopt fix 1.1a).
+    - a case where the optimum excludes the lowest-ordered person from every
+      zero-sum subset (guards 2.1).
+    - assert len(payments) <= len(non_zero_balances) - 1 (spec.md:223) across
+      the existing fixtures - one loop over _test_scenarios, no new fixtures.
+
+
+4.2 README.md's test command under-runs the suite
+
+  README.md:41
+      python -m unittest test_settle_expenses -v
+  runs one of the two test files that exist and omits test_heuristic_vs_exact.py
+  - the file that documents the optimality gap. Use
+      python -m unittest discover -v
+  in README, and add test_heuristic_vs_exact.py to the file table at :24 (it
+  currently lists only 4 files).
+
+
+4.3 QWEN.md is stale and will misdirect contributors
+
+  HEAD a4ee130 deleted test_exact.py and test_heuristic.py, but QWEN.md still
+  describes them as live:
+      :21 / :22   project tree lists test_heuristic.py and test_exact.py
+      :47 / :48   "python -m unittest test_heuristic.TestHeuristicMethod -v"
+                    "python -m unittest test_exact.TestExactMethod -v"
+      :164 / :167 / :170  per-file test sections for both modules
+      :220        "all 74 tests must pass"
+  Following those instructions gives "module not found". I did not count the
+  current tests, so please re-derive the number when you rewrite :220 - the point
+  is that the figure is now unverifiable and the commands are wrong.
+
+  I have a project memory noting this algorithm; it referenced the same deleted
+  modules, so treat memory citations here as unverified and trust the tree.
+
+
+4.4 run_csv_tests.py verifies less than it could
+
+  It checks reconciliation (balances return to zero, sys.exit(1) otherwise) -
+  good. It does not check the spec invariants it is best placed to assert:
+    - no self-payments (from == to);
+    - every payment amount > 0;
+    - payment count <= n - 1 (spec.md:223);
+    - for n <= 18, the exact count n - c against an independently derived c.
+  These are four lines in the existing verification loop and they turn the CLI
+  into a real regression net for the shipped edge cases. Cases 8 (amount 0), 9
+  (single participant), 11-14 (4-person cycle), 15/16 (Unicode: "Alice Müller",
+  "Böb", "Çarlie", "Älice"), 17 (1000000) and 18 (999, uneven 3-way) are good
+  coverage of the parsing/rounding edge space - they just aren't asserted against
+  beyond "sums to zero".
+
+  Docs nit: README documents `python run_csv_tests.py inputs.csv`, but the repo
+  ships only edge_case_inputs.csv. parse_csv accepts any path so nothing is broken;
+  either ship an inputs.csv or change the example to the filename that exists.
+
+
+--------------------------------------------------------------------------------
+5. STYLE / MAINTAINABILITY (proposals only - intentionally not applied)
+--------------------------------------------------------------------------------
+
+Low priority relative to sections 1-4, and I have deliberately not edited the
+source: in an earlier session you reverted a style change I made here, so treat
+these as suggestions to accept or reject.
+
+  - _settle's docstring at :140 asserting "this always succeeds" is the same
+    category as 2.2 - a comment claiming an invariant the code does not enforce.
+    Prefer an assert over prose.
+  - settle_expenses's `remaining` / second _settle block would read more clearly
+    as: partition people into zero-sum groups, assert the union covers `people`,
+    then settle each group. Making coverage an explicit assertion removes the
+    need for the reader to prove it.
+  - `effective_method = "exact" if n <= _EXACT_THRESHOLD else "heuristic"` at
+    :112 followed by `effective_method = method` at :114 is slightly convoluted;
+    resolving the auto case first and validating the explicit case second reads
+    better. No behaviour change intended.
+  - Aliases Expense = Dict[str, object] / Payment = Dict[str, object] are
+    untyped where the shapes are known. A TypedDict (3.8+ via typing_extensions,
+    or plain comments if you want to stay stdlib-pure) would catch the classic
+    mistake of indexing p["amt"] at mypy time. Given the "stdlib only" constraint
+    in spec.md, comments or a small validation function may be the honest answer -
+    flagging, not prescribing.
+  - Naming is otherwise good, and I want to call out one thing done right that
+    reviewers tend to miss: net_balances is used consistently rather than re-deriving
+    balances inline, and the `divmod(amount, n)` remainder-to-earlier-participants
+    rounding rule is both documented and tested (test_uneven_split's 100 -> 66/-33/-33
+    in TestNetBalances, and total_paid == 66 in TestSettleExpenses). That
+    documented-plus-tested pairing is what the rest of the file should match.
+  - Also done right: validate_expense correctly does NOT require payer in
+    participants (spec allows a payer outside the sharing group, and
+    test_payer_not_in_participant / test_payer_not_in_participants cover it),
+    and it rejects bool as an int via `not isinstance(amount, int) or
+    isinstance(amount, bool)` with a matching boolean test. Those are the kind of
+    details that usually get botched.
+
+
+--------------------------------------------------------------------------------
+SUGGESTED ORDER OF WORK
+--------------------------------------------------------------------------------
+  1. Add the reconciliation assertion (payments return every balance to zero)
+     inside settle_expenses, plus the <= n - 1 check. Cheap; converts the silent
+     wrong-answer class into loud failures and protects whatever else you change.
+  2. Decide the spec position for n > 18: raise, warn, or extend the exact
+     solver. Whatever you choose, remove the silent downgrade at :112.
+  3. Fix the DP reconstruction sentinel ([unverified] until run) and add the
+     "emitted subset count == dp[full]" assertion plus a test that forces the
+     branch.
+  4. Fix _settle's non-zero-sum call site (2.2).
+  5. Fix the doubled "Row N:" prefix (2.3) - small, user-visible.
+  6. Docs: README test command (:41) + file table; align the minimality claim
+     (:16); de-stale QWEN.md (:21, :22, :47, :48, :164, :167, :170, :220).
+  7. Tests: add n > 18 coverage and the spec-invariant assertions in
+     run_csv_tests.py.
+
+================================================================================
+APPENDIX: line anchors used in this review
+================================================================================
+  spec.md:223  "Use no more than n - 1 payments for n non-zero balances."
+  spec.md:231  greedy-but-not-globally-minimum "does not satisfy the
+               optimisation requirement"
+  spec.md:321  payment ordering insignificant; multiple lists acceptable
+               if globally minimal
+  spec.md:391  tests must verify the minimum via an independent reference
+               method or known optimal
+
+  settle_expenses.py:5    "near-minimum" (module docstring)
+  settle_expenses.py:77   "near-minimum" (settle_expenses docstring)
+  settle_expenses.py:112  auto -> exact/heuristic split at _EXACT_THRESHOLD
+  settle_expenses.py:114  effective_method = method
+  settle_expenses.py:140  "Since the group sums to zero, this always succeeds."
+  settle_expenses.py:176  "Fast but not provably optimal."
+  settle_expenses.py:181  for size in range(1, len(people) + 1) / combinations
+  settle_expenses.py:245  if sub == 0: break  (reconstruction sentinel)
+  settle_expenses.py:330  raise ValueError(f"Row {row_num}: {e}") from None
+
+  README.md:16   "using the fewest payments possible."
+  README.md:24   file table (4 files; omits test_heuristic_vs_exact.py)
+  README.md:41   python -m unittest test_settle_expenses -v
+
+  QWEN.md:21/:22       tree lists test_exact.py / test_heuristic.py
+  QWEN.md:47/:48       unittest commands for those deleted modules
+  QWEN.md:164/:167/:170 per-file sections for them
+  QWEN.md:220      "all 74 tests must pass"
+  QWEN.md:40       python -m unittest discover -v
+
+  Files present (glob test_*.py): test_settle_expenses.py,
+  test_heuristic_vs_exact.py. Tracked in git: .gitignore, QWEN.md, README.md,
+  edge_case_inputs.csv, run_csv_tests.py, settle_expenses.py, spec.md,
+  test_heuristic_vs_exact.py, test_settle_expenses.py.
