@@ -9,7 +9,7 @@ import os
 
 
 class TestSettleExpenses(unittest.TestCase):
-    """Tests for the settle_expenses function."""
+    """Tests for the settle_expenses function (default 'auto' method)."""
 
     def test_empty_input(self):
         """Empty input should return empty list."""
@@ -36,7 +36,6 @@ class TestSettleExpenses(unittest.TestCase):
         expenses = [{"payer": "Alice", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]}]
         result = settle_expenses(expenses)
         self.assertEqual(len(result), 2)
-        # Bob and Charlie each owe Alice 100
         amounts_from = {p["from"]: p["amount"] for p in result}
         self.assertEqual(amounts_from.get("Bob"), 100)
         self.assertEqual(amounts_from.get("Charlie"), 100)
@@ -45,11 +44,9 @@ class TestSettleExpenses(unittest.TestCase):
         """Uneven split: 100 cents among 3 people."""
         expenses = [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob", "Charlie"]}]
         result = settle_expenses(expenses)
-        # Alice pays 34, Bob 33, Charlie 33
-        # Bob and Charlie each owe Alice their share
         self.assertTrue(all(p["amount"] > 0 for p in result))
         total_paid = sum(p["amount"] for p in result)
-        self.assertEqual(total_paid, 66)  # 100 - 34 = 66
+        self.assertEqual(total_paid, 66)
 
     def test_payer_not_in_participants(self):
         """Payer who is not a participant."""
@@ -57,8 +54,6 @@ class TestSettleExpenses(unittest.TestCase):
             {"payer": "Dave", "amount": 100, "participants": ["Alice", "Bob"]}
         ]
         result = settle_expenses(expenses)
-        # Dave paid 100, Alice and Bob each owe 50
-        # Dave is owed 100, Alice owes 50, Bob owes 50
         self.assertTrue(len(result) >= 1)
         total_received = sum(p["amount"] for p in result if p["to"] == "Dave")
         self.assertEqual(total_received, 100)
@@ -70,7 +65,6 @@ class TestSettleExpenses(unittest.TestCase):
             {"payer": "Bob", "amount": 100, "participants": ["Alice", "Bob"]},
         ]
         result = settle_expenses(expenses)
-        # Alice and Bob break even
         self.assertEqual(result, [])
 
     def test_multiple_cases_independent(self):
@@ -80,7 +74,6 @@ class TestSettleExpenses(unittest.TestCase):
             {"payer": "Charlie", "amount": 100, "participants": ["Charlie", "Dave"]},
         ]
         result = settle_expenses(expenses)
-        # Two independent settlements
         self.assertTrue(len(result) >= 2)
 
     def test_large_amount(self):
@@ -116,14 +109,13 @@ class TestSettleExpenses(unittest.TestCase):
         self.assertTrue(all(b == 0 for b in balances.values()), f"Non-zero balances: {balances}")
 
     def test_minimum_payments_for_cycle(self):
-        """Cycle: A→B→C→A should be settled with minimum payments."""
+        """Cycle: AâBâCâA should be settled with minimum payments."""
         expenses = [
             {"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
             {"payer": "Bob", "amount": 100, "participants": ["Bob", "Charlie"]},
             {"payer": "Charlie", "amount": 100, "participants": ["Charlie", "Alice"]},
         ]
         result = settle_expenses(expenses)
-        # All have balance 0, so no payments needed
         self.assertEqual(result, [])
 
     def test_no_self_payments(self):
@@ -144,36 +136,6 @@ class TestSettleExpenses(unittest.TestCase):
         ]
         result = settle_expenses(expenses)
         self.assertTrue(all(p["amount"] > 0 for p in result))
-
-    def test_minimum_payments_optimization(self):
-        """Test that we achieve globally minimum payments."""
-        # Classic example where greedy might not be optimal
-        expenses = [
-            {"payer": "Alice", "amount": 500, "participants": ["Alice", "Bob", "Charlie"]},
-            {"payer": "Bob", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]},
-            {"payer": "Charlie", "amount": 200, "participants": ["Alice", "Bob", "Charlie"]},
-        ]
-        result = settle_expenses(expenses)
-        # Balances: Alice +100, Bob 0, Charlie 0 (after all expenses)
-        # Actually let's compute:
-        # Alice pays 500, owes 500/3 = 166 (remainder 2, so 167, 167, 166)
-        # Bob pays 300, owes 100 each
-        # Charlie pays 200, owes 66, 67, 67
-        # Net: Alice: 500 - 167 - 100 - 66 = 167
-        #      Bob: 300 - 167 - 100 - 67 = -34
-        #      Charlie: 200 - 166 - 67 - 67 = -100
-        # So Alice is owed 167, Bob owes 34, Charlie owes 100
-        # Minimum: 2 payments (Bob→Alice: 34, Charlie→Alice: 100, then... wait that's 134, not 167)
-        # Let me recalculate properly
-
-        balances = net_balances(expenses)
-
-        # Verify with the result
-        for p in result:
-            balances[p["from"]] += p["amount"]
-            balances[p["to"]] -= p["amount"]
-
-        self.assertTrue(all(b == 0 for b in balances.values()))
 
     def test_multiple_independent_cases(self):
         """Multiple independent cases in one CSV processed correctly."""
@@ -200,13 +162,126 @@ class TestSettleExpenses(unittest.TestCase):
             os.unlink(tmp_path)
 
 
+class TestSettleExpensesMethods(unittest.TestCase):
+    """Parameterized tests for settle_expenses with 'exact' and 'heuristic' methods."""
+
+    # Shared test scenarios, parameterized across both methods
+    _test_scenarios = [
+        ("empty_input", [], []),
+        ("zero_value_expense",
+         [{"payer": "Alice", "amount": 0, "participants": ["Alice", "Bob"]}], []),
+        ("two_people_even_split",
+         [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]}],
+         [{"from": "Bob", "to": "Alice", "amount": 50}]),
+        ("three_people_even_split",
+         [{"payer": "Alice", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]}],
+         [{"from": "Bob", "to": "Alice", "amount": 100},
+          {"from": "Charlie", "to": "Alice", "amount": 100}]),
+        ("uneven_split",
+         [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob", "Charlie"]}],
+         None),  # Only check total_paid
+        ("repeated_expenses_same_people",
+         [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
+          {"payer": "Bob", "amount": 100, "participants": ["Alice", "Bob"]}], []),
+        ("no_self_payments",
+         [{"payer": "Alice", "amount": 200, "participants": ["Alice", "Bob"]},
+          {"payer": "Bob", "amount": 100, "participants": ["Alice", "Bob"]}],
+         None),
+        ("no_zero_payments",
+         [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
+          {"payer": "Bob", "amount": 100, "participants": ["Alice", "Bob"]}],
+         None),
+        ("minimum_payments_for_cycle",
+         [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
+          {"payer": "Bob", "amount": 100, "participants": ["Bob", "Charlie"]},
+          {"payer": "Charlie", "amount": 100, "participants": ["Charlie", "Alice"]}], []),
+        ("large_amount",
+         [{"payer": "Alice", "amount": 1000000, "participants": ["Alice", "Bob"]}],
+         [{"from": "Bob", "to": "Alice", "amount": 500000}]),
+        ("unicode_names",
+         [{"payer": "Alice MÃ¼ller", "amount": 200,
+           "participants": ["Alice MÃ¼ller", "BÃ¶b", "Ãarlie"]}],
+         None),
+    ]
+
+    def _run_scenario(self, scenario_name, expenses, expected):
+        """Run a scenario for both methods, asserting identical outcomes."""
+        for method in ("exact", "heuristic"):
+            with self.subTest(method=method, scenario=scenario_name):
+                result = settle_expenses(expenses, method=method)
+
+                if expected is None:
+                    # Scenario-specific assertions
+                    if scenario_name == "uneven_split":
+                        self.assertTrue(all(p["amount"] > 0 for p in result))
+                        self.assertEqual(sum(p["amount"] for p in result), 66)
+                    elif scenario_name == "no_self_payments":
+                        self.assertTrue(all(p["from"] != p["to"] for p in result))
+                    elif scenario_name == "no_zero_payments":
+                        self.assertTrue(all(p["amount"] > 0 for p in result))
+                    elif scenario_name == "unicode_names":
+                        self.assertTrue(all(isinstance(p["from"], str) and isinstance(p["to"], str) for p in result))
+                else:
+                    # Build a canonical dict to ignore payment order
+                    result_dict = {(p["from"], p["to"]): p["amount"] for p in result}
+                    expected_dict = {(e["from"], e["to"]): e["amount"] for e in expected}
+                    self.assertEqual(result_dict, expected_dict)
+
+    def test_scenarios_exact(self):
+        """Run all scenarios with 'exact' method."""
+        for name, expenses, expected in self._test_scenarios:
+            self._run_scenario(name, expenses, expected)
+
+    def test_scenarios_heuristic(self):
+        """Run all scenarios with 'heuristic' method."""
+        for name, expenses, expected in self._test_scenarios:
+            self._run_scenario(name, expenses, expected)
+
+    def test_balances_settle_exact(self):
+        """Verify final balances are zero for both methods."""
+        expenses = [
+            {"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob", "Charlie"]},
+            {"payer": "Bob", "amount": 150, "participants": ["Alice", "Bob", "Charlie"]},
+            {"payer": "Charlie", "amount": 200, "participants": ["Alice", "Bob", "Charlie"]},
+        ]
+        for method in ("exact", "heuristic"):
+            with self.subTest(method=method):
+                result = settle_expenses(expenses, method=method)
+                balances = net_balances(expenses)
+                for p in result:
+                    balances[p["from"]] += p["amount"]
+                    balances[p["to"]] -= p["amount"]
+                self.assertTrue(all(b == 0 for b in balances.values()))
+
+    def test_payer_not_in_participants(self):
+        """Payer who is not a participant."""
+        expenses = [{"payer": "Dave", "amount": 100, "participants": ["Alice", "Bob"]}]
+        for method in ("exact", "heuristic"):
+            with self.subTest(method=method):
+                result = settle_expenses(expenses, method=method)
+                self.assertTrue(len(result) >= 1)
+                total_received = sum(p["amount"] for p in result if p["to"] == "Dave")
+                self.assertEqual(total_received, 100)
+
+    def test_multiple_cases_independent(self):
+        """Different participant groups within one case."""
+        expenses = [
+            {"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
+            {"payer": "Charlie", "amount": 100, "participants": ["Charlie", "Dave"]},
+        ]
+        for method in ("exact", "heuristic"):
+            with self.subTest(method=method):
+                result = settle_expenses(expenses, method=method)
+                self.assertTrue(len(result) >= 2)
+
+
 class TestValidateExpense(unittest.TestCase):
     """Tests for validate_expense function."""
 
     def test_valid_expense(self):
         """Valid expense should pass validation."""
         expense = {"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]}
-        validate_expense(expense, 1)  # Should not raise
+        validate_expense(expense, 1)
 
     def test_missing_payer(self):
         """Missing payer should raise ValueError."""
@@ -253,7 +328,7 @@ class TestValidateExpense(unittest.TestCase):
     def test_whitespace_trimming(self):
         """Whitespace in payer should be trimmed."""
         expense = {"payer": "  Alice  ", "amount": 100, "participants": [" Alice ", " Bob "]}
-        validate_expense(expense, 1)  # Should not raise
+        validate_expense(expense, 1)
 
 
 class TestParseCsv(unittest.TestCase):
@@ -329,11 +404,10 @@ class TestParseCsv(unittest.TestCase):
 
     def test_unicode_in_csv(self):
         """Unicode in CSV should parse correctly."""
-        csv_content = """case_id,payer,amount,participants
-1,Älice,100,Älice; Böb
-"""
+        csv_content = "1,Älice,100,Älice; Böb"
         with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
-            f.write(csv_content)
+            f.write("case_id,payer,amount,participants\n")
+            f.write(csv_content + "\n")
             tmp_path = f.name
 
         try:
@@ -364,22 +438,14 @@ class TestMinimumPayments(unittest.TestCase):
 
     def test_optimal_for_known_case(self):
         """Test against a known optimal solution."""
-        # Example from the spec
-        expenses = [
-            {"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
-        ]
+        expenses = [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]}]
         result = settle_expenses(expenses)
-        # Minimum is 1 payment
         self.assertEqual(len(result), 1)
 
     def test_three_people_optimal(self):
         """Three people should need at most 2 payments."""
-        expenses = [
-            {"payer": "Alice", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]},
-        ]
+        expenses = [{"payer": "Alice", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]}]
         result = settle_expenses(expenses)
-        # Bob and Charlie each owe 100 to Alice
-        # Minimum is 2 payments
         self.assertEqual(len(result), 2)
 
     def test_complex_case_optimal(self):
@@ -390,8 +456,6 @@ class TestMinimumPayments(unittest.TestCase):
             {"payer": "Charlie", "amount": 200, "participants": ["Alice", "Charlie"]},
         ]
         result = settle_expenses(expenses)
-
-        # Three payments are necessary and sufficient for these balances.
         self.assertEqual(len(result), 3)
 
 
@@ -409,8 +473,6 @@ class TestNetBalances(unittest.TestCase):
         """Single expense split among three people."""
         expenses = [{"payer": "Alice", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]}]
         balances = net_balances(expenses)
-        # Alice pays 300, owes 100 each (remainder 0)
-        # Alice: 300 - 100 = 200
         self.assertEqual(balances["Alice"], 200)
         self.assertEqual(balances["Bob"], -100)
         self.assertEqual(balances["Charlie"], -100)
@@ -419,10 +481,6 @@ class TestNetBalances(unittest.TestCase):
         """Uneven split distributes remainder to first participants."""
         expenses = [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob", "Charlie"]}]
         balances = net_balances(expenses)
-        # Alice pays 100, split as 34, 33, 33
-        # Alice: 100 - 34 = 66
-        # Bob: -33
-        # Charlie: -33
         self.assertEqual(balances["Alice"], 66)
         self.assertEqual(balances["Bob"], -33)
         self.assertEqual(balances["Charlie"], -33)

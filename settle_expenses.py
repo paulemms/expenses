@@ -31,7 +31,7 @@ Limitations:
 
 import csv
 from itertools import combinations
-from typing import Dict, List
+from typing import Dict, List, Set, Union
 
 
 Expense = Dict[str, object]
@@ -96,15 +96,15 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
     if not expenses:
         return []
 
-    # --- 1. Compute net balances ----------------------------------------
+    # Compute net balances
     balances = net_balances(expenses)
 
-    # --- 2. Filter to non-zero balances ----------------------------------
+    # Filter to non-zero balances
     non_zero_balances = {p: b for p, b in balances.items() if b != 0}
     if not non_zero_balances:
         return []
 
-    # --- 3. Find maximum number of disjoint zero-sum subsets -------------
+    # Find maximum number of disjoint zero-sum subsets
     people = list(non_zero_balances.keys())
     n = len(people)
 
@@ -118,7 +118,7 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
     else:
         zero_sum_groups = _find_max_zero_sum_subsets_heuristic(people, non_zero_balances)
 
-    # --- 4. Generate payments --------------------------------------------
+    # Generate payments
     payments = []
 
     remaining = set(people)
@@ -134,9 +134,9 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
     return payments
 
 
-def _settle(people, balances):
-    """
-    Settle debts for a group of people using greedy largest-debtor-to-largest-creditor.
+def _settle(people: Union[List[str], Set[str]], balances: Balances) -> List[Payment]:
+    """Settle debts for a group of people using greedy largest-debtor-to-largest-creditor.
+
     Since the group sums to zero, this always succeeds.
     """
     balances_copy = {p: balances[p] for p in people}
@@ -170,9 +170,9 @@ def _settle(people, balances):
     return payments
 
 
-def _find_max_zero_sum_subsets_heuristic(people, balances):
-    """
-    Greedy heuristic: enumerate all zero-sum subsets, pick smallest first.
+def _find_max_zero_sum_subsets_heuristic(people: List[str], balances: Balances) -> List[Set[str]]:
+    """Greedy heuristic: enumerate all zero-sum subsets, pick smallest first.
+
     Fast but not provably optimal.
     """
     people_map = {p: balances[p] for p in people}
@@ -195,9 +195,9 @@ def _find_max_zero_sum_subsets_heuristic(people, balances):
     return selected
 
 
-def _find_max_zero_sum_subsets_exact(people, balances):
-    """
-    Exact DP: find maximum disjoint zero-sum subsets using bitmask DP.
+def _find_max_zero_sum_subsets_exact(people: List[str], balances: Balances) -> List[frozenset]:
+    """Exact DP: find maximum disjoint zero-sum subsets using bitmask DP.
+
     O(3^n) time, O(2^n) space. Limited to n <= 18 in practice.
     """
     n = len(people)
@@ -250,7 +250,7 @@ def _find_max_zero_sum_subsets_exact(people, balances):
     return selected
 
 
-def validate_expense(expense, row_num):
+def validate_expense(expense: Expense, row_num: int) -> None:
     """Validate a single expense dictionary. Raises ValueError on issues."""
     required = {"payer", "amount", "participants"}
     missing = required - set(expense.keys())
@@ -277,9 +277,8 @@ def validate_expense(expense, row_num):
         raise ValueError(f"Row {row_num}: Duplicate participants")
 
 
-def parse_csv(csv_path):
-    """
-    Parse the input CSV file and return grouped expenses by case_id.
+def parse_csv(csv_path: str) -> Dict[str, List[Expense]]:
+    """Parse the input CSV file and return grouped expenses by case_id.
 
     Args:
         csv_path: Path to the CSV file.
