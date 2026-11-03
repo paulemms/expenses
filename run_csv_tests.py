@@ -28,7 +28,12 @@ def main():
 
     for case_id in sorted(expenses_by_case.keys(), key=lambda x: (len(x), x)):
         expenses = expenses_by_case[case_id]
-        payments = settle_expenses(expenses)
+        try:
+            payments = settle_expenses(expenses)
+        except ValueError as e:
+            print(f"Case {case_id}:")
+            print(f"  ERROR: {e}")
+            sys.exit(1)
 
         print(f"Case {case_id}:")
         if not payments:

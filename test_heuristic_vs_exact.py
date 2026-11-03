@@ -50,11 +50,12 @@ class TestHeuristicVsExact(unittest.TestCase):
 
 
 class TestLargeNHeuristicRouting(unittest.TestCase):
-    """Exercise the auto -> heuristic branch (n > _EXACT_THRESHOLD).
+    """Behaviour of the settle_expenses method dispatch for large inputs.
 
     The exact DP is O(3^n) and impractically slow past n=18 (50s+ at n=18),
-    so this fixture exercises the heuristic path that `auto` selects once the
-    balance count exceeds the exact threshold.
+    so n > 18 exercises the heuristic path. Under the optimisation
+    requirement (spec.md:231) a heuristic answer is not provably minimal,
+    so "auto" must refuse to emit one silently; callers opt in explicitly.
     """
 
     def _fixture(self):
@@ -68,28 +69,41 @@ class TestLargeNHeuristicRouting(unittest.TestCase):
         expenses.append({"payer": "P16", "amount": 4, "participants": ["P16", "P17", "P18"]})
         return expenses
 
-    def test_auto_routes_to_heuristic_and_settles(self):
-        """19 non-zero balances: auto uses heuristic, settles to zero.
-
-        Optimal packing: the eight +1's cancel eight of the ten -1's (8
-        subsets) and the +2 cancels two more -1's (1 subset) -> c = 9, so
-        the minimum payment count is n - c = 19 - 9 = 10.
-        """
-        expenses = self._fixture()
-        non_zero = {p: b for p, b in net_balances(expenses).items() if b != 0}
-
-        self.assertGreater(len(non_zero), _EXACT_THRESHOLD)
-        self.assertEqual(len(non_zero), 19)
-        self.assertEqual(sum(non_zero.values()), 0)
-
-        result = settle_expenses(expenses)  # "auto" -> heuristic at n=19
-
+    def _assert_settles(self, result, non_zero):
         balances = dict(non_zero)
         for p in result:
             balances[p["from"]] += p["amount"]
             balances[p["to"]] -= p["amount"]
         self.assertTrue(all(v == 0 for v in balances.values()))
 
+    def test_auto_raises_for_n_above_exact_threshold(self):
+        """auto must not silently emit a non-minimal heuristic answer."""
+        expenses = self._fixture()
+        non_zero = {p: b for p, b in net_balances(expenses).items() if b != 0}
+
+        self.assertEqual(len(non_zero), 19)
+        self.assertGreater(len(non_zero), _EXACT_THRESHOLD)
+
+        with self.assertRaises(ValueError) as ctx:
+            settle_expenses(expenses)  # method defaults to "auto"
+        message = str(ctx.exception).lower()
+        self.assertIn("heuristic", message)
+        self.assertIn(str(_EXACT_THRESHOLD), str(ctx.exception))
+
+    def test_heuristic_settles_within_spec_bound(self):
+        """method='heuristic' at n=19 settles to zero within the n-1 bound.
+
+        This fixture's optimum is n - c = 19 - 9 = 10: the eight +1's cancel
+        eight of the ten -1's, and the +2 cancels two more -1's -> c = 9
+        disjoint zero-sum subsets. The heuristic reaches it here, and the
+        count == 10 assertion guards against regressions.
+        """
+        expenses = self._fixture()
+        non_zero = {p: b for p, b in net_balances(expenses).items() if b != 0}
+
+        result = settle_expenses(expenses, "heuristic")
+
+        self._assert_settles(result, non_zero)
         self.assertEqual(len(result), len(non_zero) - 9)
         self.assertLessEqual(len(result), len(non_zero) - 1)
 

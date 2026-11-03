@@ -2,14 +2,17 @@
 settle_expenses.py — Minimum-payment expense settlement algorithm.
 
 Given a list of expense dictionaries, computes each person's net balance
-and returns a near-minimum set of payments to settle all debts.
+and returns a set of payments that settles all debts. With method="auto"
+or "exact" the number of payments is provably minimum (for n <= 18);
+method="heuristic" returns a near-minimum answer that is not guaranteed
+minimal.
 
 Algorithm:
     1. Compute net balances: paid minus owed for each person.
        Uneven splits allocate remainder cents to earlier participants.
-    2. Find maximum disjoint zero-sum subsets of non-zero balances.
-       For n <= 18, uses exact DP with bitmask enumeration (O(3^n)).
-       For n > 18, uses greedy heuristic (smallest subsets first).
+    2. Find maximum disjoint zero-sum subsets of non-zero balances via
+       exact bitmask DP (O(3^n)). The "auto" method raises for n > 18
+       rather than silently returning a non-minimal heuristic answer.
     3. For each zero-sum subset of size k, settle with (k - 1) payments
        using greedy largest-debtor-to-largest-creditor matching.
     4. For remaining people (if any), settle with greedy matching.
@@ -26,7 +29,9 @@ Complexity:
 
 Limitations:
     - Exact DP is limited to n <= 18 due to exponential complexity.
-    - Greedy heuristic is not provably optimal for all inputs.
+    - "auto" refuses (raises) for n > 18 rather than returning a heuristic
+      answer, so every auto/exact result is a globally minimum settlement.
+      Use method="heuristic" explicitly if you need results for larger inputs.
 """
 
 import csv
@@ -83,7 +88,8 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
             - "participants": List[str]
         method: "heuristic" (greedy, fast, not guaranteed minimal),
                 "exact" (bitmask DP, provably minimum for n <= 18),
-                or "auto" (exact for n <= 18, heuristic otherwise).
+                or "auto" (exact; raises if n > 18 rather than silently
+                returning a non-minimal heuristic answer).
 
     Returns:
         A list of payment dictionaries with keys:
@@ -110,7 +116,17 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
     n = len(people)
 
     if method == "auto":
-        effective_method = "exact" if n <= _EXACT_THRESHOLD else "heuristic"
+        if n > _EXACT_THRESHOLD:
+            raise ValueError(
+                f"auto cannot guarantee a globally minimum settlement for {n} "
+                f"people with non-zero balances (the exact DP is practical "
+                f"only for n <= {_EXACT_THRESHOLD}). The heuristic fallback is "
+                f"not provably minimal, so returning it silently would violate "
+                f"the optimisation requirement. Pass method='heuristic' to "
+                f"accept a non-minimal answer, or keep the number of people "
+                f"with non-zero balances at {_EXACT_THRESHOLD} or fewer."
+            )
+        effective_method = "exact"
     else:
         effective_method = method
 
