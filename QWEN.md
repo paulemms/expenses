@@ -17,9 +17,7 @@ expenses/
 ├── settle_expenses.py       # Core algorithm (net_balances, settle_expenses, validate_expense, parse_csv)
 ├── run_csv_tests.py         # CLI runner — reads CSV, prints settlements, verifies zero-sum
 ├── edge_case_inputs.csv     # Sample/test dataset with 20 cases
-├── test_settle_expenses.py  # Comprehensive unit tests (TestSettleExpenses, TestValidateExpense, TestParseCsv, TestMinimumPayments, TestNetBalances)
-├── test_heuristic.py        # Heuristic-specific tests
-├── test_exact.py            # Exact DP-specific tests
+├── test_settle_expenses.py  # Comprehensive unit tests (TestSettleExpenses, TestSettleExpensesMethods, TestValidateExpense, TestParseCsv, TestMinimumPayments, TestNetBalances)
 ├── test_heuristic_vs_exact.py  # Tests proving heuristic suboptimality on crafted cases
 ├── spec.md                  # Original specification (assessment prompt)
 ├── README.md                # Project summary
@@ -44,8 +42,6 @@ python -m unittest discover -v
 ```bash
 python -m unittest test_settle_expenses.TestNetBalances -v
 python -m unittest test_settle_expenses.TestMinimumPayments -v
-python -m unittest test_heuristic.TestHeuristicMethod -v
-python -m unittest test_exact.TestExactMethod -v
 python -m unittest test_heuristic_vs_exact.TestHeuristicVsExact -v
 ```
 
@@ -155,17 +151,12 @@ case_id,payer,amount,participants
 ## Test Coverage
 
 ### `test_settle_expenses.py`
-- **TestSettleExpenses**: Core settlement behavior (20+ tests)
+- **TestSettleExpenses**: Core settlement behavior (15 tests)
+- **TestSettleExpensesMethods**: Same scenarios run under both `exact` and `heuristic` (5 tests)
 - **TestValidateExpense**: Validation edge cases (9 tests)
-- **TestParseCsv**: CSV parsing and error handling (9 tests)
+- **TestParseCsv**: CSV parsing and error handling (7 tests)
 - **TestMinimumPayments**: Optimal payment count verification (3 tests)
 - **TestNetBalances**: Net balance computation correctness (7 tests)
-
-### `test_heuristic.py`
-- Heuristic-specific behavior verification (15 tests)
-
-### `test_exact.py`
-- Exact DP correctness verification (16 tests)
 
 ### `test_heuristic_vs_exact.py`
 - Proof that heuristic is suboptimal on crafted input (7 payments vs 6)
@@ -217,6 +208,6 @@ When the payer is also a participant, they receive +amount (credited) and -share
 ## Verification Strategy
 
 Before committing changes:
-1. Run `python -m unittest discover -v` — all 74 tests must pass.
+1. Run `python -m unittest discover -v` — all 48 tests must pass.
 2. Run `python run_csv_tests.py edge_case_inputs.csv` — all cases must settle to zero.
 3. Check that no inline balance calculations remain (use `net_balances()` helper).

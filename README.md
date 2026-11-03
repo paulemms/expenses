@@ -22,6 +22,7 @@ the program calculates each person's net balance (total paid minus total owed) a
 | `settle_expenses.py` | Core algorithm — parse, validate, and settle |
 | `run_csv_tests.py` | CLI runner — reads a CSV and prints settlements |
 | `test_settle_expenses.py` | Unit tests (standard-library `unittest`) |
+| `test_heuristic_vs_exact.py` | Tests where the heuristic is provably suboptimal vs the exact DP |
 | `edge_case_inputs.csv` | Sample / edge-case test data |
 
 ## Usage
@@ -38,5 +39,5 @@ python run_csv_tests.py inputs.csv
 ## Tests
 
 ```bash
-python -m unittest test_settle_expenses -v
+python -m unittest discover -v
 ```
