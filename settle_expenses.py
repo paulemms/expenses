@@ -81,8 +81,9 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
             - "payer": str
             - "amount": int
             - "participants": List[str]
-        method: "heuristic" (greedy, fast), "exact" (DP, correct),
-                or "auto" (exact for n<=18, heuristic otherwise).
+        method: "heuristic" (greedy, fast, not guaranteed minimal),
+                "exact" (bitmask DP, provably minimum for n <= 18),
+                or "auto" (exact for n <= 18, heuristic otherwise).
 
     Returns:
         A list of payment dictionaries with keys:

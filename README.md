@@ -13,7 +13,7 @@ case_id,payer,amount,participants
 3,Alice,300,Alice;Eve
 ```
 
-the program calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone — using the fewest payments possible.
+the program calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone — using the fewest payments possible for up to 18 people (exact), and a greedy heuristic that settles everyone but is not guaranteed minimal beyond that.
 
 ## Files
 
@@ -30,6 +30,18 @@ the program calculates each person's net balance (total paid minus total owed) a
 ```bash
 python run_csv_tests.py inputs.csv
 ```
+
+## Settlement methods
+
+`settle_expenses(expenses, method=...)` accepts:
+
+- **`"exact"`** (default via `"auto"`) — bitmask dynamic programming. Returns the
+  provably minimum number of payments for up to 18 people with non-zero
+  balances; impractically slow beyond that.
+- **`"heuristic"`** — greedy subset selection. Fast for any size, but **not
+  guaranteed** to use the fewest payments (see `test_heuristic_vs_exact.py`).
+- **`"auto"`** — `"exact"` for 18 or fewer non-zero balances, `"heuristic"`
+  otherwise.
 
 ## Requirements
 
