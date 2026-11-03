@@ -327,6 +327,14 @@ def parse_csv(csv_path: str) -> Dict[str, List[Expense]]:
                 expenses_by_case[case_id].append(expense)
 
             except (ValueError, TypeError, KeyError, AttributeError) as e:
-                raise ValueError(f"Row {row_num}: {e}") from None
+                # validate_expense() and the Empty case_id raise already format
+                # their messages as "Row {row_num}: ..."; strip a matching prefix
+                # here so we never emit a doubled "Row N: Row N:" message, while
+                # bare errors (e.g. int() conversion) still get the prefix once.
+                message = str(e)
+                prefix = f"Row {row_num}: "
+                if message.startswith(prefix):
+                    message = message[len(prefix):]
+                raise ValueError(f"Row {row_num}: {message}") from None
 
     return expenses_by_case
