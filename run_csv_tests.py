@@ -39,6 +39,9 @@ def main():
 
         # Verify all balances are zero
         balances = net_balances(expenses)
+        # n for the n-1 bound is the number of people with a nonzero NET
+        # balance BEFORE settlement (post-settlement counts are always zero).
+        n_nonzero = sum(1 for b in balances.values() if b != 0)
 
         for p in payments:
             balances[p["from"]] += p["amount"]
@@ -48,6 +51,23 @@ def main():
         if non_zero:
             print(f"  ERROR: Unsettled balances: {non_zero}")
             sys.exit(1)
+
+        # spec.md:223 — no more than n - 1 payments for n non-zero balances,
+        # plus structural sanity: no self-payments and every amount > 0.
+        # (n == 0 has no payments, so clamp the bound to >= 0.)
+        if len(payments) > max(0, n_nonzero - 1):
+            print(
+                f"  ERROR: {len(payments)} payments exceed the n - 1 bound "
+                f"(n = {n_nonzero})"
+            )
+            sys.exit(1)
+        for p in payments:
+            if p["from"] == p["to"]:
+                print(f"  ERROR: Self-payment detected: {p}")
+                sys.exit(1)
+            if p["amount"] <= 0:
+                print(f"  ERROR: Non-positive payment: {p}")
+                sys.exit(1)
 
     print("\nAll cases settled successfully.")
 
