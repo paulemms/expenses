@@ -23,8 +23,10 @@ subsets found. This formula holds because each zero-sum subset reduces
 the required payments by 1.
 
 Complexity:
-    Time:  O(3^n) for exact DP, O(2^n * n) for heuristic.
-           Greedy matching within subsets is O(n^2).
+    Time:  O(3^n) for exact DP, O(2^n * n) for heuristic subset
+           enumeration, O(n^2) for greedy matching. The greedy method's
+           matching uses binary heaps, dropping it to O(n log n).
+           Matching within a zero-sum subset (via _settle) is O(n^2).
     Space: O(2^n) for DP table or subset storage.
 
 Limitations:
@@ -35,6 +37,7 @@ Limitations:
 """
 
 import csv
+from heapq import heapify, heappop, heappush
 from itertools import combinations
 from typing import Dict, List, Set, Union
 
@@ -86,10 +89,13 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
             - "payer": str
             - "amount": int
             - "participants": List[str]
-        method: "heuristic" (greedy, fast, not guaranteed minimal),
-                "exact" (bitmask DP, provably minimum for n <= 18),
-                or "auto" (exact; raises if n > 18 rather than silently
-                returning a non-minimal heuristic answer).
+        method: "exact" (bitmask DP, provably minimum for n <= 18),
+                "heuristic" (exponential subset enumeration, near-minimum,
+                may miss the optimum), or "greedy" (polynomial O(n log n)
+                largest-debtor-to-largest-creditor settlement, not
+                guaranteed minimal, no size limit). "auto" uses exact and
+                raises if n > 18 rather than silently returning a
+                non-minimal answer.
 
     Returns:
         A list of payment dictionaries with keys:
@@ -97,8 +103,11 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
             - "to": str
             - "amount": int
     """
-    if method not in ("auto", "exact", "heuristic"):
-        raise ValueError(f"Unknown method: {method!r}. Must be 'auto', 'exact', or 'heuristic'.")
+    if method not in ("auto", "exact", "heuristic", "greedy"):
+        raise ValueError(
+            f"Unknown method: {method!r}. Must be 'auto', 'exact', 'heuristic', "
+            "or 'greedy'."
+        )
 
     if not expenses:
         return []
@@ -129,6 +138,13 @@ def settle_expenses(expenses: List[Expense], method: str = "auto") -> List[Payme
         effective_method = "exact"
     else:
         effective_method = method
+
+    # Greedy: settle every balance directly with a polynomial largest-debtor
+    # to largest-creditor pass. It does not decompose into zero-sum subsets, so
+    # it is not guaranteed minimal, but it is fast (O(n log n)) and has no size
+    # limit. It runs before the zero-sum-group logic, which both branches below.
+    if effective_method == "greedy":
+        return _greedy_settle_balances(non_zero_balances)
 
     if effective_method == "exact":
         zero_sum_groups = _find_max_zero_sum_subsets_exact(people, non_zero_balances)
@@ -183,6 +199,45 @@ def _settle(people: Union[List[str], Set[str]], balances: Balances) -> List[Paym
             del balances_copy[debtor]
         if balances_copy[creditor] == 0:
             del balances_copy[creditor]
+
+    return payments
+
+
+def _greedy_settle_balances(balances: Balances) -> List[Payment]:
+    """Settle every balance with a single largest-debtor-to-largest-creditor pass.
+
+    This is the polynomial counterpart of :func:`_settle`: instead of splitting
+    balances into zero-sum subsets, it settles all of them at once. It is not
+    guaranteed minimal (the minimum-transaction problem is NP-hard), but it
+    always reaches zero because :func:`net_balances` guarantees the balances sum
+    to zero.
+
+    The heap-based "refinement" keeps two binary heaps -- debtors keyed by
+    their (negative) balance so the largest debtor sorts first, and creditors
+    keyed by their negated balance so the largest creditor sorts first -- so
+    each of the at most ``n - 1`` payments costs an O(log n) pop/push, giving
+    O(n log n) overall instead of the O(n^2) of :func:`_settle`.
+    """
+    debtors = [(b, p) for p, b in balances.items() if b < 0]
+    creditors = [(-b, p) for p, b in balances.items() if b > 0]
+    heapify(debtors)
+    heapify(creditors)
+
+    payments = []
+    while debtors and creditors:
+        key_debtor, debtor = debtors[0]
+        key_cred, creditor = creditors[0]
+        amount = min(-key_debtor, -key_cred)  # both keys are negative magnitudes
+        payments.append({"from": debtor, "to": creditor, "amount": amount})
+
+        heappop(debtors)
+        heappop(creditors)
+        rem_debtor = -key_debtor - amount
+        rem_cred = -key_cred - amount
+        if rem_debtor > 0:
+            heappush(debtors, (key_debtor + amount, debtor))
+        if rem_cred > 0:
+            heappush(creditors, (key_cred + amount, creditor))
 
     return payments
 

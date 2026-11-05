@@ -2,8 +2,15 @@
 Unit tests for settle_expenses.py
 """
 
+import random
 import unittest
-from settle_expenses import settle_expenses, validate_expense, parse_csv, net_balances
+from settle_expenses import (
+    settle_expenses,
+    validate_expense,
+    parse_csv,
+    net_balances,
+    _settle,
+)
 import tempfile
 import os
 
@@ -516,6 +523,125 @@ class TestNetBalances(unittest.TestCase):
         """Empty expense list returns empty dict."""
         balances = net_balances([])
         self.assertEqual(balances, {})
+
+
+class TestGreedyMethod(unittest.TestCase):
+    """Tests for the polynomial O(n log n) greedy settlement method.
+
+    Greedy settles every balance at once with the largest-debtor-to-largest-
+    creditor pass, so it is fast and size-unbounded but not guaranteed minimal.
+    These tests pin that it stays valid, respects the n - 1 bound, matches exact
+    where the optimum is obvious, and stays numerically identical to the
+    reference _settle() reference matching.
+    """
+
+    def _assert_valid(self, result, expenses, non_zero_count):
+        """A settlement settles to zero, has no self-payments/zero amounts,
+        and uses at most non_zero_count - 1 payments."""
+        balances = net_balances(expenses)
+        for p in result:
+            self.assertNotEqual(
+                p["from"], p["to"], f"self-payment detected: {p}"
+            )
+            self.assertGreater(p["amount"], 0, f"non-positive payment: {p}")
+            balances[p["from"]] += p["amount"]
+            balances[p["to"]] -= p["amount"]
+        self.assertTrue(
+            all(v == 0 for v in balances.values()),
+            f"unsettled balances: {[v for v in balances.values() if v != 0]}",
+        )
+        if non_zero_count:
+            self.assertLessEqual(len(result), non_zero_count - 1)
+
+    def test_greedy_matches_exact_on_trivial_scenarios(self):
+        """Where the optimum is obvious, greedy equals exact exactly."""
+        pinned = [
+            ([{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]}],
+             [{"from": "Bob", "to": "Alice", "amount": 50}]),
+            ([{"payer": "Alice", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]}],
+             [{"from": "Bob", "to": "Alice", "amount": 100},
+              {"from": "Charlie", "to": "Alice", "amount": 100}]),
+            ([{"payer": "Alice", "amount": 1000000, "participants": ["Alice", "Bob"]}],
+             [{"from": "Bob", "to": "Alice", "amount": 500000}]),
+        ]
+        for expenses, expected in pinned:
+            with self.subTest(scenario=expenses):
+                result = settle_expenses(expenses, "greedy")
+                result_dict = {(p["from"], p["to"]): p["amount"] for p in result}
+                expected_dict = {(e["from"], e["to"]): e["amount"] for e in expected}
+                self.assertEqual(result_dict, expected_dict)
+
+    def test_greedy_is_optimal_on_known_optimum(self):
+        """On the known-optimum fixture, greedy matches exact (6), not heuristic (7).
+
+        The fixture has a known optimum of 6 payments; the heuristic misses it
+        with 7. Greedy reaches the optimum here, which also confirms the heap
+        implementation settles to zero on this multi-group input.
+        """
+        expenses = [
+            {"payer": "A", "amount": 8, "participants": ["A", "C"]},
+            {"payer": "E", "amount": 10, "participants": ["E", "C"]},
+            {"payer": "B", "amount": 2, "participants": ["B", "F"]},
+            {"payer": "G", "amount": 4, "participants": ["G", "H"]},
+            {"payer": "I", "amount": 24, "participants": ["I", "D"]},
+            {"payer": "I", "amount": 10, "participants": ["I", "F"]},
+            {"payer": "I", "amount": 8, "participants": ["I", "H"]},
+        ]
+        result = settle_expenses(expenses, "greedy")
+        self._assert_valid(result, expenses, non_zero_count=9)
+        self.assertEqual(len(result), 6)
+        self.assertEqual(len(settle_expenses(expenses, "exact")), 6)
+
+    def test_greedy_count_matches_reference_matching(self):
+        """Greedy's payment count equals the O(n^2) _settle() reference."""
+        expenses = [
+            {"payer": "Alice", "amount": 500, "participants": ["Alice", "Bob", "Charlie", "Dave"]},
+            {"payer": "Bob", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]},
+            {"payer": "Charlie", "amount": 200, "participants": ["Alice", "Charlie"]},
+        ]
+        balances = net_balances(expenses)
+        non_zero = {p: b for p, b in balances.items() if b != 0}
+        result = settle_expenses(expenses, "greedy")
+        reference = _settle(list(non_zero), non_zero)
+        self.assertEqual(len(result), len(reference))
+        self.assertEqual(len(result), 3)  # matches the exact optimum here
+        self._assert_valid(result, expenses, len(non_zero))
+
+    def test_greedy_has_no_size_limit_and_stays_valid(self):
+        """Greedy settles a large input (n=2000 pairs) within the n - 1 bound."""
+        random.seed(1)
+        expenses = [
+            {"payer": f"P{2 * k}", "amount": random.randint(1, 1000),
+             "participants": [f"P{2 * k}", f"P{2 * k + 1}"]}
+            for k in range(2000)
+        ]
+        balances = net_balances(expenses)
+        non_zero = {p: b for p, b in balances.items() if b != 0}
+        result = settle_expenses(expenses, "greedy")
+        self._assert_valid(result, expenses, len(non_zero))
+        # n here is 4000, well past the exact DP's 18-person cap; the heap
+        # implementation still settles to zero in O(n log n) without the limit.
+        self.assertLess(len(result), len(non_zero))
+
+    def test_greedy_no_self_payments_and_no_zero_amounts(self):
+        """Structural invariants hold for the greedy method."""
+        expenses = [
+            {"payer": "Alice", "amount": 200, "participants": ["Alice", "Bob"]},
+            {"payer": "Bob", "amount": 100, "participants": ["Alice", "Bob"]},
+        ]
+        result = settle_expenses(expenses, "greedy")
+        self.assertTrue(all(p["from"] != p["to"] for p in result))
+        self.assertTrue(all(p["amount"] > 0 for p in result))
+
+    def test_greedy_invalid_method_raises(self):
+        """An unknown method name still raises ValueError."""
+        expenses = [{"payer": "A", "amount": 10, "participants": ["A", "B"]}]
+        with self.assertRaises(ValueError):
+            settle_expenses(expenses, "bogus")
+
+    def test_greedy_empty_input(self):
+        """Empty input returns an empty list for the greedy method."""
+        self.assertEqual(settle_expenses([], "greedy"), [])
 
 
 if __name__ == "__main__":

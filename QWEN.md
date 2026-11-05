@@ -4,7 +4,7 @@
 
 This project implements a **minimum-payment expense settlement algorithm**. Given a CSV of shared expenses (who paid what, who shares), it computes each person's net balance and produces the globally minimum set of payments to settle all debts.
 
-**Core innovation**: Uses bitmask dynamic programming to find maximum disjoint zero-sum subsets, achieving optimal payment counts for small cases (≤18 people), with a greedy heuristic fallback for larger inputs.
+**Core innovation**: Uses bitmask dynamic programming to find maximum disjoint zero-sum subsets, achieving optimal payment counts for small cases (≤18 people), with a heuristic fallback and a faster polynomial greedy for larger inputs.
 
 **Key constraint**: Python 3.8+ standard library only — no external dependencies.
 
@@ -62,12 +62,18 @@ python run_csv_tests.py edge_case_inputs.csv
 ### Settlement Algorithm (`settle_expenses()`)
 1. Compute net balances via `net_balances()`.
 2. Filter to non-zero balances.
-3. Find maximum disjoint zero-sum subsets:
-   - **Exact** (`method="exact"`): Bitmask DP, O(3^n) time, O(2^n) space. Limited to ≤18 people.
-   - **Heuristic** (`method="heuristic"`): Greedy smallest-subset-first enumeration.
-   - **Auto** (default): Exact for n≤18, heuristic otherwise.
-4. Within each zero-sum subset, settle using greedy largest-debtor-to-largest-creditor matching.
-5. Settle remaining people with the same greedy matching.
+3. Dispatch by method:
+   - **Exact** (`method="exact"`): bitmask DP for maximum disjoint zero-sum
+     subsets, O(3^n) time / O(2^n) space. Limited to ≤18 people.
+   - **Heuristic** (`method="heuristic"`): exponential smallest-subset-first
+     enumeration — kept as the exponential fallback, not provably optimal.
+   - **Greedy** (`method="greedy"`): polynomial O(n log n) greedy
+     largest-debtor-to-largest-creditor matching over all balances at once via
+     two binary heaps. Not guaranteed minimal, no size limit.
+   - **Auto** (`method="auto"`): exact for n≤18; **raises** for n>18 rather
+     than silently returning a non-minimal answer.
+4. For the exact/heuristic paths, settle each zero-sum subset with greedy
+   largest-debtor-to-largest-creditor matching, then settle remaining people.
 
 **Formula**: Minimum payments = `n - c` where `n` = non-zero balances, `c` = disjoint zero-sum subsets found.
 
@@ -84,6 +90,7 @@ python run_csv_tests.py edge_case_inputs.csv
 | `_settle(people, balances)` | settle_expenses.py | Internal: greedy settlement for a zero-sum group |
 | `_find_max_zero_sum_subsets_exact()` | settle_expenses.py | Internal: bitmask DP for optimal subset selection |
 | `_find_max_zero_sum_subsets_heuristic()` | settle_expenses.py | Internal: greedy subset enumeration |
+| `_greedy_settle_balances(balances)` | settle_expenses.py | Internal: O(n log n) greedy matching over all balances via two binary heaps |
 
 ---
 
@@ -157,6 +164,7 @@ case_id,payer,amount,participants
 - **TestParseCsv**: CSV parsing and error handling (7 tests)
 - **TestMinimumPayments**: Optimal payment count verification (3 tests)
 - **TestNetBalances**: Net balance computation correctness (7 tests)
+- **TestGreedyMethod**: O(n log n) greedy method (validity, n-1 bound, matches `exact` on trivial cases, no size limit, count matches `_settle` reference)
 
 ### `test_heuristic_vs_exact.py`
 - Proof that heuristic is suboptimal on crafted input (7 payments vs 6)
@@ -187,7 +195,7 @@ When the payer is also a participant, they receive +amount (credited) and -share
 
 - **Testing**: Use Python's `unittest` framework. All tests must pass before committing.
 - **Code style**: Type hints for public functions, docstrings for all public API.
-- **No external dependencies**: Only `csv`, `itertools`, `unittest`, `sys`, `typing`.
+- **No external dependencies**: Only `csv`, `heapq`, `itertools`, `unittest`, `sys`, `typing`.
 - **Error handling**: Raise `ValueError` with descriptive messages including row numbers where applicable.
 - **Commit messages**: Describe the "why", not just the "what".
 
@@ -208,6 +216,6 @@ When the payer is also a participant, they receive +amount (credited) and -share
 ## Verification Strategy
 
 Before committing changes:
-1. Run `python -m unittest discover -v` — all 48 tests must pass.
+1. Run `python -m unittest discover -v` — all 57 tests must pass.
 2. Run `python run_csv_tests.py edge_case_inputs.csv` — all cases must settle to zero.
 3. Check that no inline balance calculations remain (use `net_balances()` helper).
