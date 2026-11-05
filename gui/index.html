@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Settler — Expense calculator</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js"></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-mark" aria-hidden="true">↗</div>
+    <div>
+      <h1>Settler</h1>
+      <p>Shared expenses. Minimum payments.</p>
+    </div>
+    <div class="top-actions">
+      <button id="import-btn" class="button secondary">Import CSV</button>
+      <button id="export-btn" class="button secondary" disabled>Export CSV</button>
+      <input id="csv-file" type="file" accept=".csv,text/csv" hidden>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="intro">
+      <div>
+        <div class="eyebrow">EXPENSE SETTLEMENT</div>
+        <h2>Who owes whom?</h2>
+        <p>Add shared expenses, then calculate a settlement using your Python algorithm.</p>
+      </div>
+      <div class="method-wrap">
+        <label for="method">Settlement method</label>
+        <select id="method">
+          <option value="auto">Auto (exact up to 18 people)</option>
+          <option value="exact">Exact (up to 18 people)</option>
+          <option value="heuristic">Heuristic (fast, not always minimal)</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="panel form-panel">
+      <div class="panel-heading">
+        <div>
+          <div class="eyebrow">NEW EXPENSE</div>
+          <h3>Add an expense</h3>
+        </div>
+        <span class="step">01</span>
+      </div>
+      <form id="expense-form">
+        <div class="form-grid">
+          <div class="field description-field">
+            <label for="description">Description <span class="optional">optional</span></label>
+            <input id="description" type="text" placeholder="e.g. Dinner, train tickets" maxlength="120">
+          </div>
+          <div class="field">
+            <label for="amount">Amount (£)</label>
+            <input id="amount" type="number" min="0" step="0.01" placeholder="0.00" required>
+          </div>
+          <div class="field">
+            <label for="payer">Paid by</label>
+            <input id="payer" type="text" placeholder="Person's name" list="people-list" required>
+            <datalist id="people-list"></datalist>
+          </div>
+        </div>
+        <div class="field participants-field">
+          <label for="participants">Shared between <span class="hint">Names separated by commas or semicolons</span></label>
+          <input id="participants" type="text" placeholder="Alice, Bob, Charlie" required>
+          <p class="microcopy">The payer does not have to be included among the participants.</p>
+        </div>
+        <div class="form-footer">
+          <p class="microcopy">Amounts are entered in pounds and stored as integer pence.</p>
+          <button class="button primary" type="submit">＋ Add expense</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="content-grid">
+      <section class="panel expenses-panel">
+        <div class="panel-heading">
+          <div>
+            <div class="eyebrow">YOUR INPUT</div>
+            <h3>Expenses <span id="expense-count" class="count">0</span></h3>
+          </div>
+          <button id="clear-btn" class="text-button" disabled>Clear all</button>
+        </div>
+        <div id="expense-list" class="expense-list">
+          <div class="empty-state">
+            <div class="empty-icon">£</div>
+            <strong>No expenses yet</strong>
+            <span>Add your first shared expense above.</span>
+          </div>
+        </div>
+        <div class="expenses-total">
+          <span>Total expenses</span>
+          <strong id="total-expenses">£0.00</strong>
+        </div>
+      </section>
+
+      <section class="panel results-panel">
+        <div class="panel-heading">
+          <div>
+            <div class="eyebrow">CALCULATED IN PYTHON</div>
+            <h3>Settlement</h3>
+          </div>
+          <span class="step">02</span>
+        </div>
+        <div id="status" class="status" role="status">Loading Python runtime…</div>
+        <div id="balances" class="balances"></div>
+        <div id="payments" class="payments">
+          <div class="empty-state compact">
+            <strong>Waiting for expenses</strong>
+            <span>Your settlement will appear here.</span>
+          </div>
+        </div>
+        <div id="result-summary" class="result-summary" hidden></div>
+      </section>
+    </section>
+
+    <footer>
+      <span>Private by design — expenses stay in this browser.</span>
+      <span>Python · Pyodide · <a href="https://github.com/paulemms/expenses" target="_blank" rel="noopener">Your algorithm</a></span>
+    </footer>
+  </main>
+</body>
+</html>
