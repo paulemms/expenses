@@ -37,7 +37,7 @@ function setStatus(message, kind = "") {
 async function initialisePython() {
   try {
     setStatus("Loading Python runtime…");
-    pyodide = await loadPyodide({ indexURL: `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/` });
+    pyodide = await loadPyodide({ indexURL: `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/` });
     setStatus("Loading your settlement algorithm…");
     const response = await fetch(PYTHON_SOURCE_URL);
     if (!response.ok) {
@@ -64,6 +64,7 @@ function calculate() {
   const pyExpenses = pyodide.toPy(expenseForPython());
   const globals = pyodide.toPy({});
   globals.set("expenses_arg", pyExpenses);
+  pyodide.runPython("import settle_expenses", { globals });
   try {
     const method = methodEl.value;
     const result = pyodide.runPython(
@@ -131,7 +132,7 @@ function renderResults() {
 
   try {
     const { payments, balances } = calculate();
-    const balanceEntries = [...balances.entries()].filter(([, amount]) => amount !== 0);
+    const balanceEntries = Object.entries(balances).filter(([, amount]) => amount !== 0);
     $("balances").innerHTML = balanceEntries.length
       ? balanceEntries.map(([name, amount]) => `<span class="balance-chip ${amount > 0 ? "credit" : "debt"}">
           ${escapeHtml(name)}: ${amount > 0 ? "+" : "−"}${pounds(Math.abs(amount))}</span>`).join("")
