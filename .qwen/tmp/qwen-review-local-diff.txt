@@ -1,0 +1,107 @@
+diff --git a/Userspaulcodeexpenses.qwentmpqwen-review-local-plan.json b/Userspaulcodeexpenses.qwentmpqwen-review-local-plan.json
+new file mode 100644
+index 0000000..4f61e18
+--- /dev/null
++++ b/Userspaulcodeexpenses.qwentmpqwen-review-local-plan.json
+@@ -0,0 +1,67 @@
++{
++  "target": "local",
++  "diffPath": ".qwen\\tmp\\qwen-review-local-diff.txt",
++  "diffPathAbsolute": "C:\\Users\\paul\\code\\expenses\\.qwen\\tmp\\qwen-review-local-diff.txt",
++  "diffLines": 34,
++  "diffChars": 820,
++  "srcDiffLines": 34,
++  "testDiffLines": 0,
++  "docsDiffLines": 0,
++  "generatedDiffLines": 0,
++  "wrapperSignal": false,
++  "chunks": [
++    {
++      "id": 1,
++      "startLine": 1,
++      "endLine": 34,
++      "lines": 34,
++      "chars": 820,
++      "maxLineChars": 128,
++      "oversized": false,
++      "files": [
++        { "path": "Userspaulcodeexpenses.qwentmpqwen-review-parse-args.json", "newStart": 1, "newEnd": 27 }
++      ]
++    }
++  ],
++  "files": [
++    {
++      "path": "Userspaulcodeexpenses.qwentmpqwen-review-parse-args.json",
++      "kind": "source",
++      "hunks": [
++        { "newStart": 1, "newEnd": 27 }
++      ],
++      "addedLines": 27,
++      "removedLines": 0,
++      "changedLines": 27,
++      "preLines": 0,
++      "fileLines": 0,
++      "rewriteRatio": 0,
++      "heavy": false,
++      "binary": false
++    }
++  ],
++  "selection": {
++    "schemaVersion": "qwen.review-selection/v1",
++    "sourceArtifactSha256": "f2d27618be744b1668591448ca5ba14cabf6b563ba068fc52f6a9793bc84ef6b",
++    "selectionSha256": "4ce8b1695f89dd42aeddfb25896eaf768b76e8189ec745c2d9b5fb51a4f7410e"
++  },
++  "budget": {
++    "inlineAngles": 3,
++    "candidateFloor": 1,
++    "sweep": true,
++    "specialistCap": 0,
++    "verifyShard": 8,
++    "agentToolBudget": 31,
++    "reverseAuditRounds": 10
++  },
++  "deadlineSeconds": 28800,
++  "deadlineSource": "default",
++  "untrackedFiles": [
++    "Userspaulcodeexpenses.qwentmpqwen-review-parse-args.json"
++  ],
++  "skippedFiles": [],
++  "cachePath": ".qwen\\review-cache\\local.json",
++  "cacheCandidatePath": ".qwen\\tmp\\qwen-review-local-cache-candidate.json",
++  "cacheCandidateStateId": "e0f960bbdd115b163e7e611c559c6137db147196d4fe77865d75f00e3824f9a6",
++  "effort": "high"
++}
+diff --git a/Userspaulcodeexpenses.qwentmpqwen-review-parse-args.json b/Userspaulcodeexpenses.qwentmpqwen-review-parse-args.json
+new file mode 100644
+index 0000000..c3ce470
+--- /dev/null
++++ b/Userspaulcodeexpenses.qwentmpqwen-review-parse-args.json
+@@ -0,0 +1,27 @@
++{
++  "target": {
++    "type": "local"
++  },
++  "effort": "high",
++  "effortSource": "explicit",
++  "comment": {
++    "requested": false,
++    "effective": false
++  },
++  "fix": {
++    "requested": false,
++    "effective": false
++  },
++  "severityFloor": "auto",
++  "severityFloorSource": "default",
++  "topology": "auto",
++  "topologySource": "default",
++  "resume": {
++    "requested": false,
++    "effective": false
++  },
++  "promotedNumberTarget": false,
++  "extraTokens": [],
++  "unknownFlags": [],
++  "warnings": []
++}
+\ No newline at end of file

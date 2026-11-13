@@ -1,0 +1,84 @@
+{
+  "target": "local",
+  "diffPath": ".qwen\\tmp\\qwen-review-local-diff.txt",
+  "diffPathAbsolute": "C:\\Users\\paul\\code\\expenses\\.qwen\\tmp\\qwen-review-local-diff.txt",
+  "diffLines": 107,
+  "diffChars": 3043,
+  "srcDiffLines": 107,
+  "testDiffLines": 0,
+  "docsDiffLines": 0,
+  "generatedDiffLines": 0,
+  "wrapperSignal": true,
+  "chunks": [
+    {
+      "id": 1,
+      "startLine": 1,
+      "endLine": 107,
+      "lines": 107,
+      "chars": 3043,
+      "maxLineChars": 128,
+      "oversized": false,
+      "files": [
+        { "path": "Userspaulcodeexpenses.qwentmpqwen-review-local-plan.json", "newStart": 1, "newEnd": 67 },
+        { "path": "Userspaulcodeexpenses.qwentmpqwen-review-parse-args.json", "newStart": 1, "newEnd": 27 }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "Userspaulcodeexpenses.qwentmpqwen-review-local-plan.json",
+      "kind": "source",
+      "hunks": [
+        { "newStart": 1, "newEnd": 67 }
+      ],
+      "addedLines": 67,
+      "removedLines": 0,
+      "changedLines": 67,
+      "preLines": 0,
+      "fileLines": 0,
+      "rewriteRatio": 0,
+      "heavy": false,
+      "binary": false
+    },
+    {
+      "path": "Userspaulcodeexpenses.qwentmpqwen-review-parse-args.json",
+      "kind": "source",
+      "hunks": [
+        { "newStart": 1, "newEnd": 27 }
+      ],
+      "addedLines": 27,
+      "removedLines": 0,
+      "changedLines": 27,
+      "preLines": 0,
+      "fileLines": 0,
+      "rewriteRatio": 0,
+      "heavy": false,
+      "binary": false
+    }
+  ],
+  "selection": {
+    "schemaVersion": "qwen.review-selection/v1",
+    "sourceArtifactSha256": "1f849b824b857b5210751b96a3e8b0889e33c83ff7dadea1f0c9d82245e05ca3",
+    "selectionSha256": "0e9ff8fccaee70afa52c9603af4a9353d087c52557592566c07a519f9931f378"
+  },
+  "budget": {
+    "inlineAngles": 4,
+    "candidateFloor": 2,
+    "sweep": true,
+    "specialistCap": 2,
+    "verifyShard": 8,
+    "agentToolBudget": 35,
+    "reverseAuditRounds": 10
+  },
+  "deadlineSeconds": 28800,
+  "deadlineSource": "default",
+  "untrackedFiles": [
+    "Userspaulcodeexpenses.qwentmpqwen-review-local-plan.json",
+    "Userspaulcodeexpenses.qwentmpqwen-review-parse-args.json"
+  ],
+  "skippedFiles": [],
+  "cachePath": ".qwen\\review-cache\\local.json",
+  "cacheCandidatePath": ".qwen\\tmp\\qwen-review-local-cache-candidate.json",
+  "cacheCandidateStateId": "16934ae33097fe47ca55e38a184296118b6643349b89ea51557e838a84162faa",
+  "effort": "high"
+}

@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "target": "local",
+  "headSha": "2f20c16e765592ff8bf77be88a7679c7ac850fac",
+  "files": {
+    "Userspaulcodeexpenses.qwentmpqwen-review-local-plan.json": "100644:4f61e18c98ba19f3431f98979a81e15e13457dbe:diff=unspecified,binary=unspecified,text=unspecified",
+    "Userspaulcodeexpenses.qwentmpqwen-review-parse-args.json": "100644:c3ce4708cfa3126b40e6a4933cd8b16c9a110ea5:diff=unspecified,binary=unspecified,text=unspecified"
+  },
+  "stateId": "16934ae33097fe47ca55e38a184296118b6643349b89ea51557e838a84162faa",
+  "lastModelId": "Qwen3.8-35B-A3B-Distill-GGUF-Q4_K_M@2a4ebb10",
+  "untracked": true
+}
