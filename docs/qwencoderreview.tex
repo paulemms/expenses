@@ -1,0 +1,469 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage[margin=1in]{geometry}
+
+\setlength{\emergencystretch}{3em}
+\sloppy
+
+\title{Review of docs/methodology.tex}
+\author{documentation review pass}
+\date{November 2026}
+
+\begin{document}
+
+\maketitle
+
+\section{Scope and Method}
+
+This review covers \texttt{docs/methodology.tex} (422 lines, compiled to 8 pages). A citation written
+\texttt{tex:115} refers to a source line of that document. A citation naming
+\texttt{settle\_expenses.py} with a line number refers to the implementation as it stands today (394
+lines).
+
+Evidence used:
+
+\begin{itemize}
+  \item Direct reading of \texttt{settle\_expenses.py} for every behavioural claim the document makes.
+  \item \texttt{methodology.aux} for section numbering (sections 1--10, 8 pages).
+  \item \texttt{methodology.log} for compile diagnostics (one warning, three overfull boxes).
+\end{itemize}
+
+Two runtime probes were not executed, so claims about executed behaviour below are reading-based, not
+observed: the \texttt{\_settle()} selection question (finding C1) and the emptiness of the remainder
+branch (finding M7). Both are argued from the source, and each is flagged as such.
+
+\textbf{Note on process:} \texttt{methodology.tex} has not been modified. Everything below is a proposal
+list; the file remains as authored.
+
+\section{Findings at a Glance}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.055\textwidth} >{\raggedright\arraybackslash}p{0.14\textwidth}
+>{\raggedright\arraybackslash}p{0.515\textwidth} >{\raggedright\arraybackslash}p{0.16\textwidth}}
+\toprule
+ID & Location & Issue & Severity \\
+\midrule
+M1 & tex:115 & Theorem statement is false as written (feasible settlements are unbounded) & High \\
+M2 & tex:126 & Lower-bound arithmetic error plus a missing step that the proof actually needs & High \\
+M3 & tex:129, 222 & "Exactly $k-1$ payments" is false; counterexample with two 5-cent payments & High \\
+M4 & tex:32, 143 & $\min(n-c,\, n-1)$ is redundant; the second branch never occurs & Medium \\
+M5 & tex:242 & Optimality proof cites a lemma that does not prove DP optimality & High \\
+M6 & tex:209--220 & Reconstruction lemma rests on an unstated invariant & Medium \\
+M7 & tex:224, 233 & "Otherwise $|P| \le n-c-1$" contradicts the same line's lower bound & High \\
+M8 & tex:187 & Transition sum is off by $1/2$ (missing $w=0$ term) & Low \\
+M9 & tex:336 & "Arbitrarily large" greedy gap: unsupported, and the described construction is impossible & Medium \\
+M10 & tex:330 & "Exactly one heap is non-empty" at termination; both are empty & Medium \\
+M11 & tex:334, 344 & Iteration bound $2n-1$ and "clears both removes one person" & Low \\
+M12 & tex:370--371 & "Single participant has no effect" is false unless the payer participates & Medium \\
+M13 & tex:376 & Share bound and "always positive" claim both wrong at $A=1, |U|=2$ & Medium \\
+C1 & tex:139, 222, 398 & \texttt{\_settle()} pairs the smallest debtor, not the largest & High \\
+C2 & tex:306--319 & Heap keys and pseudocode comment contradict the code and themselves & High \\
+C3 & tex:49 & "Multiset of participants" contradicts duplicate rejection & Low \\
+C4 & tex:393--401 & Source table header "Lines" and one wrong section mapping & Medium \\
+C5 & tex:406--420 & Dispatch table omits \texttt{heuristic} and the unknown-method error & Low \\
+C6 & tex:289--293 & Sorting cost contradicts its own "dominant term" line & Medium \\
+L1 & whole file & No \texttt{\textbackslash label}; every hard-coded cross-reference is wrong & High \\
+L2 & tex:281 & LaTeX commands inside \texttt{verbatim} print literally & Medium \\
+L3 & tex:163, 213, 392--404 & Three overfull boxes; the source table overflows the text block & Medium \\
+L4 & preamble & Seven loaded packages are never used & Low \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Mathematical Findings}
+
+\subsection{M1 --- The $n-1$ bound is stated backwards (tex:115)}
+
+\begin{quote}
+  Any feasible settlement uses at most $n-1$ payments.
+\end{quote}
+
+This is false: feasibility is closed under adding a redundant cycle of payments, so feasible settlements
+are unbounded in size (take any settlement and add $x \to y$, $y \to z$, $z \to x$ of equal amounts).
+The proof given is a construction, which establishes the existential form:
+
+\begin{quote}
+  There exists a feasible settlement with at most $n-1$ payments; hence the minimum size is at most $n-1$.
+\end{quote}
+
+The existential form is exactly what the later text needs (tex:233 uses it as an upper bound on the
+constructed solution), so this is a wording fix, not a restructuring.
+
+\subsection{M2 --- The $n-c$ lower bound proof does not prove the bound (tex:126)}
+
+Two defects in one paragraph.
+
+\textbf{Arithmetic.} The line reads
+$\sum (k_j - 1) = n - \sum k_j$. With $\sum k_j$ denoting the total number of people inside the $c$
+selected subsets, the left side equals $\sum k_j - c$, not $n - \sum k_j$. The two expressions coincide
+only in the degenerate case where the document silently means something else.
+
+\textbf{Direction.} Inside a lower-bound argument the remainder term is bounded from above ("the remaining
+$n - \sum k_j$ people need at most ... additional payments"), which cannot yield a lower bound. Adding
+the two halves as written gives $\ge \sum k_j - c$ plus an upper bound, i.e. nothing.
+
+\textbf{What is missing.} The proof never says anything about the settlement being analysed. The standard
+formal argument is:
+
+\begin{enumerate}
+  \item Take any feasible settlement $P$ with $t$ payments and build the multigraph with vertex set $S$
+and one edge per payment.
+  \item Each connected component has zero total balance (payments only move money inside a component),
+so each component is a zero-sum subset of $S$.
+  \item A component on $k$ vertices needs at least $k-1$ edges. Summing over components,
+$t \ge \sum_{\text{comp}} (k-1)$, which equals $n$ minus the number of components.
+  \item The components are disjoint zero-sum subsets, so their number is at most $c$. Hence $t \ge n - c$.
+\end{enumerate}
+
+Step 2 is the crux and is absent from the document. It is worth adding because it is also what makes the
+result feel obvious once seen.
+
+\subsection{M3 --- "Exactly $k-1$ payments" for greedy on a zero-sum group (tex:129, tex:222)}
+
+tex:222 reads: "Since the subset is zero-sum, this terminates with all internal balances at zero in
+exactly $k-1$ payments." A payment clears both endpoints whenever the two magnitudes are equal. Take
+a zero-sum group of four people with balances $\{+5, +5, -5, -5\}$: two payments of 5 clear all four,
+which is $k-2$, not $k-1$.
+
+Correct statement: greedy uses \textbf{at most} $k-1$ payments; equality holds exactly when the payment
+graph on the group is a tree. For the achievability half of Theorem 3.2 the honest construction is the
+star: pick one person in the zero-sum subset as a hub, order the others, and pay each into or out of the
+hub, giving exactly $k-1$. That proves existence without relying on any greedy behaviour.
+
+\subsection{M4 --- $\min(n-c,\; n-1)$ has a branch that never fires (tex:32, tex:143, tex:129)}
+
+Whenever $n \ge 1$ non-zero balances exist, $n \ge 2$ (balances sum to zero and none is zero) and the whole
+set $S$ is itself a zero-sum subset, so $c \ge 1$ and $n - c \le n - 1$. The $\min$ in tex:32 and tex:143
+is therefore always the first argument, and the parenthetical in tex:129 ("or $n-1$ if $n-c > n-1$,
+i.e., $c < 1$") describes an unreachable case. Recommend stating the optimum as $n-c$ and, if a boundary
+case is wanted, stating it explicitly as $n = 0$ (no payments).
+
+\subsection{M5 --- The optimality proof is circular (tex:242)}
+
+\begin{quote}
+  By Lemma 1, the DP finds the true maximum $c$.
+\end{quote}
+
+The only lemma in the document (tex:213) is "Correctness of reconstruction" and says nothing about
+$\texttt{dp}$ computing a maximum. The load-bearing step is unproven. Add before it:
+
+\begin{quote}
+  \textbf{Lemma (DP value).} For every mask $m$, $\texttt{dp}[m]$ equals the maximum number of pairwise
+disjoint zero-sum subsets contained in $m$.
+  \textbf{Proof.} Induct on $|m|$. In an optimal packing for $m$, either the person of
+$\texttt{lowbit}$ is unused --- value $\le \texttt{dp}[m \oplus \texttt{lowbit}]$ --- or they belong
+to exactly one selected zero-sum subset $T \subseteq m$ containing that bit, giving
+$1 + \texttt{dp}[m \setminus T] \le 1 + \texttt{dp}[m \oplus \texttt{candidate}]$ over candidates the
+loop enumerates (tex:177 iterates every submask of $m \oplus \texttt{lowbit}$, so every such $T$ is
+visited). Both branches match the transition, and both transitions are feasible.
+\end{quote}
+
+With that lemma, tex:242's argument becomes valid.
+
+\subsection{M6 --- Reconstruction lemma has a gap that could hide a real bug (tex:209--220)}
+
+The claim "The final $m$ with $\texttt{parent} = 0$ has no subsets remaining" does not follow from what
+is proved. In the DP, $\texttt{parent}[m] = 0$ is simply the marker for Option A, and Option A can be
+taken while $\texttt{dp}[m] > 0$ for a general mask. So the extraction loop
+(\texttt{settle\_expenses.py:275--281}) could in principle stop early and return a partial packing
+without any error surfacing.
+
+The claim is nonetheless true along the reconstruction path, for a reason the document never states:
+$m$ stays zero-sum throughout the loop. Initially $m = 2^n - 1$ is zero-sum; each extraction removes a
+zero-sum subset. For a zero-sum $m$ with $\texttt{dp}[m] \ge 1$, take an optimal packing of $m$ that
+leaves the $\texttt{lowbit}$ person uncovered: the leftover people are non-empty and sum to zero, so
+they form one more disjoint zero-sum subset, contradicting maximality. Hence for such $m$ Option B strictly
+beats Option A and $\texttt{parent}[m] \ne 0$. State that invariant (and the fact that it is what makes
+the loop safe) in the proof.
+
+\subsection{M7 --- The "remainder" branch contradicts the lower bound (tex:224, tex:233)}
+
+tex:233 says, in one sentence: "Otherwise $|P| \le n - c - 1$. In all cases ... $|P| \ge n - c$". Those
+two clauses cannot both hold. The resolution is that "otherwise" never happens, and the document should
+say so:
+
+\begin{quote}
+  For any \textbf{maximal} packing of disjoint zero-sum subsets, the remainder is empty. The complement
+of the packing sums to zero ($S$ sums to zero and each subset sums to zero); if it were non-empty it would
+have at least two members (a single non-zero balance cannot sum to zero) and would be disjoint from every
+selected subset, so it could be added --- contradicting maximality.
+\end{quote}
+
+That applies to both paths: the exact DP is maximum, and the heuristic is maximal because it scans every
+enumerated zero-sum subset and takes any that is disjoint (\texttt{settle\_expenses.py:242--247}). So
+\texttt{Step 5} (tex:224--226), the $|P_{\text{remainder}}|$ term in the tex:233 formula, and the
+\texttt{if remaining:} branch (\texttt{settle\_expenses.py:153}) are all dead. Recommend either deleting
+Step 5 and asserting $|P| = n - c$, or keeping the code branch and labelling it defensive.
+
+\subsection{M8 --- Off-by-a-half in the transition count (tex:187)}
+
+The chain
+$\sum_{w=1}^{n} \binom{n}{w} 2^{w-1} = \frac12 \sum_{w=0}^{n} \binom{n}{w} 2^w = \frac{3^n}{2}$
+silently includes the $w=0$ term, which is 1. The sum equals $(3^n - 1)/2$. The $O(3^n)$ conclusion
+is unaffected; the middle equality is simply wrong as written.
+
+\subsection{M9 --- "Arbitrarily large" greedy gap (tex:336)}
+
+The sentence is unsupported and, read as a ratio, false. Greedy uses at most $n-1$ payments while the
+optimum is $n-c$, and each zero-sum subset has at least two members so $c \le n/2$, giving
+$\text{optimum} \ge n/2$. The ratio is therefore below 2 and the additive gap below $n/2$
+(explicitly: gap $\le c - 1$). "Arbitrarily large" can only mean the additive gap as $n \to \infty$,
+and the document gives no construction for that.
+
+The parenthetical construction ("multiple disjoint zero-sum components connected through a single
+\texttt{bridge} person") cannot be realised as described: a person with a non-zero balance cannot lie in
+two disjoint zero-sum subsets of $S$, so there is no such bridge.
+
+The repo does contain a concrete divergence, but it is heuristic-versus-exact, not greedy-versus-exact:
+\texttt{tests/test\_heuristic\_vs\_exact.py} produces 6 payments with \texttt{exact} and 7 with
+\texttt{heuristic} on the same input. Recommend replacing the sentence with that citable example, plus
+the gap bound above.
+
+\subsection{M10 --- Heap termination state (tex:330)}
+
+"Exactly one heap is non-empty" is wrong: at termination both heaps are empty. Heap entries are only ever
+pushed when a residual magnitude is strictly positive (\texttt{settle\_expenses.py:205--211} and
+\texttt{216--220}), so a non-empty debtor heap implies a strictly negative total, contradicting
+$\sum b_i = 0$. "At most one" (the earlier sentence) is fine; "exactly one" is not.
+
+\subsection{M11 --- Iteration counting (tex:334, tex:344)}
+
+tex:334: "Each iteration that fully clears both a debtor and a creditor removes one person from
+consideration" --- clearing both removes two. tex:344: "Total iterations $\le 2n-1$" is loose. Since
+$\texttt{amount} = \min(...)$ always exhausts at least one of the two people, at most $n-1$ iterations
+run. The $O(n \log n)$ conclusion is unchanged either way.
+
+\subsection{M12 --- "Single participant" is not a no-op (tex:370--371)}
+
+\begin{quote}
+  An expense with $|U| = 1$ credits the payer $A$ and debits the participant $A$ by $A$. ... No effect.
+\end{quote}
+
+This only holds when the payer \emph{is} the participant. If the lone participant is someone else, the
+expense moves money: the payer gets $+A$ and the participant $-A$, and \texttt{net\_balances} produces
+exactly that. The next subsection (tex:373) already states the non-participant case, which is how the
+error is visible: the two subsections contradict each other for $|U|=1$ and payer not in $U$.
+
+\subsection{M13 --- Payer-as-participant bound and sign claim (tex:376)}
+
+"Since $s_p \le A/m < A$ when $|U| \ge 2$, the payer always has a positive net from their own expense."
+Two problems:
+
+\begin{itemize}
+  \item Shares are the rounded-up or rounded-down value, so the correct bound is
+$s_p \le \lceil A/m \rceil$. That can equal $A$ even for $m \ge 2$.
+  \item The conclusion fails when it does equal $A$: with $A = 1$ cent, $m = 2$, and the payer among the
+first $A \bmod m = 1$ participant, $s_p = 1 = A$ and the payer's net contribution from that expense is
+$0$. Also $0$ for $A = 0$.
+\end{itemize}
+
+Correct claim: the payer's contribution is $A - s_p \ge 0$, strictly positive except when $A \le 1$
+(with $m \ge 2$). Note also that the "Payer Not a Participant" subsection (tex:374) is correct as written
+("the payer is a creditor for that expense" is a per-expense statement, which is the right framing).
+
+\section{Document-versus-Code Findings}
+
+\subsection{C1 --- \texttt{\_settle()} settles smallest-debtor-to-largest-creditor (tex:139, 222, 398)}
+
+The document calls the intra-group routine "greedy largest-debtor-to-largest-creditor" three times
+(tex:139, tex:222, tex:398). The implementation (\texttt{settle\_expenses.py:175}) is:
+
+\begin{verbatim}
+debtor = max(debtors, key=debtors.get)   # debtors values are all < 0
+creditor = max(creditors, key=creditors.get)
+\end{verbatim}
+
+\texttt{debtors} is built from balances $< 0$ (\texttt{settle\_expenses.py:170}), so
+$\texttt{max}$ over it selects the \textbf{least negative} balance, i.e. the person who owes the
+\emph{least}. The creditor side is correct (largest positive). So the executed intra-group rule is
+smallest-debtor-to-largest-creditor, and the function's own docstring (\texttt{settle\_expenses.py:161})
+repeats the same incorrect description.
+
+Consequences worth stating in the review:
+
+\begin{itemize}
+  \item Section 4.5 (tex:220--222) and the Source Reference role text (tex:398) describe behaviour the
+code does not have.
+  \item The abstract's bullet on \texttt{greedy} (tex:35) and Section 6 describe the two-heap routine,
+which \emph{is} largest-to-largest (\texttt{settle\_expenses.py:199--200}). Two different greedy rules
+therefore live in the module, and the document describes one of them twice.
+  \item Tests that assert payment counts and zero-sum validity would not catch this; only the tie-breaking
+and pairing pattern would differ.
+\end{itemize}
+
+This is the item most likely to be a genuine code bug rather than a document bug, and it needs a
+decision from the maintainer: either \texttt{max(debtors, ...)} becomes
+\texttt{min(debtors, key=debtors.get)} (or \texttt{max(..., key=abs)}) to match the documented rule, or
+the doc and docstring change to describe the current rule. Reading-based: not confirmed by execution.
+
+\subsection{C2 --- Heap keying and a self-contradictory comment (tex:306--307, tex:314--319)}
+
+The document says both heaps are keyed by $(-b_i, i)$. Only the creditor heap is:
+
+\begin{verbatim}
+debtors   = [(b, p)  for p, b in balances.items() if b < 0]   # key is b itself
+creditors = [(-b, p) for p, b in balances.items() if b > 0]   # key is -b
+\end{verbatim}
+(\texttt{settle\_expenses.py:199--200})
+
+Debtors are already negative, so their raw balance is the min-heap key for largest magnitude. The document's
+pseudocode then carries the comment \texttt{k\_d = -b\_d < 0}, which contradicts itself: if $b_d < 0$ then
+$-b_d > 0$. With that comment taken literally, the following line
+(\texttt{amount = min(-k\_d, -k\_c)}) would compute a negative amount. Taking the code's convention
+($k_d = b_d < 0$) makes the formula right. Recommend fixing the comment and splitting the two bullets
+so the asymmetry is explicit. Also worth one sentence on tie-breaking: the heap path breaks ties
+lexicographically on the person key, while \texttt{\_settle()} breaks them by dict insertion order.
+
+\subsection{C3 --- "Multiset of participants" (tex:49)}
+
+\texttt{net\_balances} would debit a repeated name twice, but \texttt{validate\_expense} rejects
+duplicates inside one expense (\texttt{settle\_expenses.py:330}). The document's input contract (Section 1)
+never mentions validation or the no-duplicates rule, so "multiset" is both wrong and the only place a
+reader would infer it. Suggest "list of distinct participants, in CSV order" --- CSV order is load-bearing
+for the rounding rule (tex:68--78), which the input list should flag.
+
+\subsection{C4 --- Source Reference table (tex:390--404)}
+
+Three issues in one table:
+
+\begin{itemize}
+  \item The header is "Lines" but the entries are \texttt{\S2}, \texttt{\S3}, ... which render as section
+signs pointing at this document's own sections, not source lines of \texttt{settle\_expenses.py}. Rename
+the column or replace the entries with real line ranges.
+  \item \texttt{settle\_expenses()} $\to$ \texttt{\S3} is off: Section 3 is the graph formulation. Its
+dispatch behaviour is Section 10 (tex:406), and its strategy is Section 4.1 (tex:134). The other five
+mappings check out (\texttt{net\_balances} 2, \texttt{\_settle} 4, \texttt{\_greedy\_settle\_balances} 6,
+exact DP 4, heuristic 5).
+  \item \texttt{validate\_expense()} and \texttt{parse\_csv()} are absent, while the section's intro claims
+the table covers the module's functions. Two rows would close it.
+\end{itemize}
+
+\subsection{C5 --- Dispatch table is incomplete (tex:406--420)}
+
+The four cases listed cover \texttt{exact}, \texttt{greedy}, and both \texttt{auto} branches. Missing:
+\texttt{method="heuristic"} (accepted, never warns, no bound applied, and the only path that is neither
+proven minimal nor polynomial), and the \texttt{ValueError} for an unrecognised method
+(\texttt{settle\_expenses.py:98--101}). Nothing in the section is stale; the signature at
+\texttt{settle\_expenses.py:74} is (abridged, type hints omitted)
+
+\begin{verbatim}
+def settle_expenses(expenses, method="auto", threshold=18)
+\end{verbatim}
+
+and the fallback path emits a \texttt{UserWarning} (\texttt{settle\_expenses.py:110--114}).
+
+\subsection{C6 --- Heuristic sorting cost contradicts the "dominant term" line (tex:289--293)}
+
+"Sorting: $O(n^2 \cdot 2^n)$" followed by "Dominant term: $O(n \cdot 2^n)$" cannot both be right. The
+implementation sorts by subset length (\texttt{settle\_expenses.py:239}), i.e. $O(z \log z)$ for $z$
+zero-sum subsets with $z \le 2^n$, which is $O(n \cdot 2^n)$ --- consistent with the dominant term and with
+the comparison table's $O(n \cdot 2^n)$ (tex:353). The space claim $O(n \cdot 2^n)$ (tex:355) is right
+but should say why: the module keeps every zero-sum subset in memory as frozensets
+(\texttt{settle\_expenses.py:232--237}).
+
+\section{LaTeX and Presentation Findings}
+
+\subsection{L1 --- No cross-references resolve (whole file)}
+
+There is no \texttt{\textbackslash label} anywhere in the document, and every reference is hard-coded.
+Because the preamble declares section-based theorem counters
+(\texttt{\textbackslash newtheorem\{theorem\}\{Theorem\}[section]} with \texttt{lemma} sharing the same
+counter), the environments actually print as:
+
+\begin{itemize}
+  \item Theorem 2.1 (Zero-Sum Invariant),
+  \item Theorem 3.1 (the $n-1$ bound), Theorem 3.2 (the $n-c$ bound),
+  \item Lemma 4.1 (Correctness of reconstruction), Theorem 4.2 (Optimality).
+\end{itemize}
+
+The prose cites "Theorem 2" (tex:156, tex:330), "Theorem 3" and "Theorem 4" (tex:233), "Theorem 4"
+again and "Lemma 1" (tex:242). None match, and "Theorem 4" does not exist. A shared counter also means a
+reader cannot tell a lemma from a theorem by its number. Fix: add \texttt{\textbackslash label}s and
+\texttt{\textbackslash ref}s (plus \texttt{hyperref}) and let the numbering settle itself.
+
+\subsection{L2 --- Markup inside \texttt{verbatim} prints literally (tex:281)}
+
+The heuristic pseudocode block contains \texttt{if subset \textbackslash cap used == \textbackslash emptyset:}
+inside \texttt{verbatim}. That prints as literal backslash markup in the PDF rather than as set
+notation. Either spell it in plain ASCII (\texttt{if not (subset \& used):}, matching the code at
+\texttt{settle\_expenses.py:244}) or move the line out of \texttt{verbatim}.
+
+\subsection{L3 --- Overfull boxes (from \texttt{methodology.log})}
+
+\begin{verbatim}
+Overfull hbox (147.70341pt too wide) detected at line 163
+Overfull hbox (7.29892pt too wide) in paragraph at lines 213-214
+Overfull hbox (72.94775pt too wide) in paragraph at lines 392-404
+LaTeX Warning: No \author given.
+\end{verbatim}
+
+The 147.7pt case is the \texttt{dp[m]} display at tex:163, whose single-line \texttt{\textbackslash text\{...\}}
+prose is far wider than the text block; break it into two lines or state it in prose with an inline
+formula. The 72.9pt case is the Source Reference table (tex:392--404): it visibly exceeds the 1in margins,
+so it needs narrower column types (\texttt{p\{...\}}) or short roles. The 7.3pt one is cosmetic.
+Adding an \texttt{\textbackslash author} removes the warning.
+
+\subsection{L4 --- Unused packages (tex:5--18)}
+
+\texttt{longtable}, \texttt{multirow} and \texttt{makecell} are loaded and never used (no matching
+commands appear in the body), and \texttt{array}, \texttt{colortbl}, \texttt{xcolor} and \texttt{amsfonts}
+likewise have no user: no coloured cells, no custom column specs, no \texttt{\textbackslash mathbb}. Only
+\texttt{amsmath}/\texttt{amssymb} (math and \texttt{\textbackslash checkmark}), \texttt{amsthm},
+\texttt{booktabs}, \texttt{float} (two \texttt{[H]} tables) and \texttt{geometry} are doing work.
+
+\subsection{L5 --- Abstract overclaims (tex:38)}
+
+"We prove correctness for all three" is not met: the exact path's proof is circular (M5), the greedy proof
+has the heap-state error (M10), and the heuristic section offers no proof at all --- only the assertion that
+it "may" miss the optimum (tex:295--296), with no example in the document. One worked example there, or
+a pointer to the test file, would make the claim earnable.
+
+\section{What Checks Out}
+
+Worth recording so the fixes above can be targeted rather than sweeping:
+
+\begin{itemize}
+  \item The rounding rule (tex:68--82) matches \texttt{divmod} in \texttt{net\_balances}
+(\texttt{settle\_expenses.py:57--66}) exactly, including "extra cents to earlier participants in CSV
+order", and the partition identity $\sum_u s_u = A$ is correct.
+  \item The Zero-Sum Invariant (tex:84--96) and its proof are correct and are used correctly later.
+  \item The bitmask encoding, the zero-sum precomputation cost $O(n \cdot 2^n)$, the submask iteration
+(tex:177, matching \texttt{settle\_expenses.py:263--272}), the Option A/Option B dichotomy, and the
+$O(3^n)$/$O(2^n)$ totals are all right (modulo M8's off-by-a-half).
+  \item The threshold rationale (tex:263--265) matches the code's default of 18 (\texttt{settle\_expenses.py:74}).
+  \item Payment-amount positivity and the no-self-payment invariant (tex:379--384) hold in both routines.
+  \item The comparison table's time/space row (tex:352--355) is consistent with the code once C6's sorting
+line is fixed.
+\end{itemize}
+
+\section{Suggested Order of Repair}
+
+\begin{enumerate}
+  \item \textbf{C1} --- decide whether \texttt{\_settle()} should pick the largest or smallest debtor, then
+align the code, its docstring, and tex:139/222/398. Everything else in Section 4 depends on the answer.
+  \item \textbf{M5 + M2 + M3} --- restore a real chain: DP-value lemma, component-graph lower bound, star
+construction for achievability.
+  \item \textbf{M7} --- state that the remainder is always empty; delete or label Step 5.
+  \item \textbf{M1, M6, M10, M12, M13} --- wording and boundary corrections with no structural cost.
+  \item \textbf{L1} --- switch to \texttt{label}/\texttt{ref}; until then every reference in the file reads
+wrong.
+  \item \textbf{C2, C4, C5, C6, M9, M11, M8, L2--L5} --- local corrections.
+\end{enumerate}
+
+\subsection{Claims not verified by execution}
+
+\begin{itemize}
+  \item C1 is a reading of \texttt{settle\_expenses.py:175}. A probe of \texttt{\_settle()} for four
+people with balances \texttt{\{A:5, B:5, C:-5, D:-5\}} was declined at the shell, so the executed pairing
+pattern is inferred, not observed.
+  \item M7's "remainder is always empty" is a proof, not a survey of runs; if any path is found where a
+remainder appears, the maximality argument above is what would need re-examining.
+\end{itemize}
+
+\end{document}
