@@ -41,6 +41,10 @@ python run_csv_tests.py inputs.csv
 - **`"heuristic"`** — exponential subset enumeration. Near-minimum for any
   size, but **not guaranteed** to use the fewest payments (see
   `tests/test_heuristic_vs_exact.py`).
+- **`"exact2"`** — bitmask dynamic programming in O(n · 2^n) time and
+  O(2^n) space. Returns the provably minimum number of payments, with no
+  enforced size limit; time and memory still grow exponentially. Select with
+  `settle_expenses(expenses, method="exact2")`.
 - **`"greedy"`** — polynomial O(n log n) greedy largest-debtor-to-largest-
   creditor matching over all balances. Fast and size-unbounded, but **not
   guaranteed** minimal (the minimum-transaction problem is NP-hard).
@@ -67,6 +71,7 @@ With `n` non-zero balances and `c` disjoint zero-sum subsets found, the minimum 
 | Method | Time | Space | Guaranteed minimal? | Size limit |
 |--------|------|-------|---------------------|------------|
 | `exact` | O(3^n) | O(2^n) | Yes | ≤ 18 |
+| `exact2` | O(n · 2^n) | O(2^n) | Yes | Any (exponential) |
 | `heuristic` | O(2^n · n) | O(2^n) | No | Any |
 | `greedy` | O(n log n) | O(n) | No | Any |
 

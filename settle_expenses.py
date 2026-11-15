@@ -12,6 +12,7 @@ Public API:
 
 Method dispatch:
     "exact"      — bitmask DP, provably minimum for any n (exponential time)
+    "exact2"     — O(n * 2^n) bitmask DP, provably minimum for any n
     "heuristic"  — greedy subset selection, fast for any size
     "greedy"     — polynomial O(n log n), not guaranteed minimal
     "auto"       — exact for n <= threshold; warns + falls back to greedy
@@ -79,7 +80,8 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
             - "payer": str
             - "amount": int
             - "participants": List[str]
-        method: "exact" (bitmask DP, provably minimum for n <= threshold),
+        method: "exact" (O(3^n) bitmask DP, provably minimum),
+                "exact2" (O(n * 2^n) bitmask DP, provably minimum),
                 "heuristic" (exponential subset enumeration, near-minimum,
                 may miss the optimum), or "greedy" (polynomial O(n log n)
                 largest-debtor-to-largest-creditor settlement, not
@@ -95,9 +97,9 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
             - "recipient": str
             - "amount": int
     """
-    if method not in ("auto", "exact", "heuristic", "greedy"):
+    if method not in ("auto", "exact", "exact2", "heuristic", "greedy"):
         raise ValueError(
-            f"Unknown method: {method!r}. Must be 'auto', 'exact', 'heuristic', "
+            f"Unknown method: {method!r}. Must be 'auto', 'exact', 'exact2', 'heuristic', "
             "or 'greedy'."
         )
 
@@ -138,6 +140,8 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
 
     if effective_method == "exact":
         zero_sum_groups = _find_max_zero_sum_subsets_exact(people, non_zero_balances)
+    elif effective_method == "exact2":
+        zero_sum_groups = _find_max_zero_sum_subsets_exact2(people, non_zero_balances)
     else:
         zero_sum_groups = _find_max_zero_sum_subsets_heuristic(people, non_zero_balances)
 
@@ -299,6 +303,54 @@ def _find_max_zero_sum_subsets_exact(people: List[str], balances: Balances) -> L
             break
         selected.append(frozenset(people[i] for i in range(n) if sub & (1 << i)))
         mask ^= sub
+
+    return selected
+
+
+def _find_max_zero_sum_subsets_exact2(people: List[str], balances: Balances) -> List[frozenset]:
+    """Find a maximum zero-sum partition in O(n * 2^n) time, O(2^n) space.
+
+    Any zero-sum partition can be ordered group by group, giving a zero-sum
+    prefix at every group boundary. Conversely, consecutive zero-sum prefixes
+    delimit disjoint zero-sum groups. Thus maximizing zero-sum prefixes over
+    all orderings maximizes the group count (and minimizes payments).
+
+    dp[mask] is the best prefix count for an ordering of mask. Choose its last
+    person by maximizing dp[mask without person], then count mask itself if
+    its sum is zero. A parent bit reconstructs the ordering and its groups.
+    The caller supplies non-zero balances whose total is zero.
+    """
+    n = len(people)
+    balance_list = [balances[p] for p in people]
+    size = 1 << n
+    sums = [0] * size
+    dp = [0] * size
+    parent = [0] * size
+
+    for mask in range(1, size):
+        lowbit = mask & -mask
+        sums[mask] = sums[mask ^ lowbit] + balance_list[lowbit.bit_length() - 1]
+        best = -1
+        bits = mask
+        while bits:
+            bit = bits & -bits
+            candidate = dp[mask ^ bit]
+            if candidate > best:
+                best = candidate
+                parent[mask] = bit
+            bits ^= bit
+        dp[mask] = best + (sums[mask] == 0)
+
+    selected = []
+    group = set()
+    mask = size - 1
+    while mask:
+        bit = parent[mask]
+        group.add(people[bit.bit_length() - 1])
+        mask ^= bit
+        if sums[mask] == 0:
+            selected.append(frozenset(group))
+            group = set()
 
     return selected
 
