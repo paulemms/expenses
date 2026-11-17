@@ -15,7 +15,7 @@ Method dispatch:
     "exact2"     — O(n * 2^n) bitmask DP, provably minimum for any n
     "heuristic"  — greedy subset selection, fast for any size
     "greedy"     — polynomial O(n log n), not guaranteed minimal
-    "auto"       — exact for n <= threshold; warns + falls back to greedy
+    "auto"       — exact2 for n <= threshold; warns + falls back to greedy
                    above the threshold.
 """
 
@@ -85,11 +85,11 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
                 "heuristic" (exponential subset enumeration, near-minimum,
                 may miss the optimum), or "greedy" (polynomial O(n log n)
                 largest-debtor-to-largest-creditor settlement, not
-                guaranteed minimal, no size limit). "auto" uses exact and
+                guaranteed minimal, no size limit). "auto" uses exact2 and
                 warns + falls back to greedy if n exceeds the threshold.
         threshold: The maximum number of non-zero balances for which the
-            "exact" method is used with "auto" dispatch. Defaults to 18;
-            the exact DP is O(3^n) and impractical past this size.
+            "exact2" method is used with "auto" dispatch. Defaults to 18;
+            time and memory still grow exponentially with this method.
 
     Returns:
         A list of payment dictionaries with keys:
@@ -127,7 +127,7 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
             )
             effective_method = "greedy"
         else:
-            effective_method = "exact"
+            effective_method = "exact2"
     else:
         effective_method = method
 

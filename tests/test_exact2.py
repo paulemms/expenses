@@ -4,6 +4,7 @@ import itertools
 import random
 import unittest
 import warnings
+from unittest.mock import patch
 
 from settle_expenses import (
     _find_max_zero_sum_subsets_exact,
@@ -14,6 +15,19 @@ from settle_expenses import (
 
 
 class TestExact2(unittest.TestCase):
+    def test_default_uses_exact2_at_auto_threshold(self):
+        expenses = [{"payer": "A", "amount": 10, "participants": ["B"]}]
+        with patch(
+            "settle_expenses._find_max_zero_sum_subsets_exact2",
+            wraps=_find_max_zero_sum_subsets_exact2,
+        ) as primary, patch(
+            "settle_expenses._find_max_zero_sum_subsets_exact",
+            side_effect=AssertionError("auto must use exact2"),
+        ):
+            result = settle_expenses(expenses, threshold=2)
+        primary.assert_called_once()
+        self.assertEqual(result, [{"sender": "B", "recipient": "A", "amount": 10}])
+
     def assert_settles(self, expenses, payments):
         balances = net_balances(expenses)
         for payment in payments:

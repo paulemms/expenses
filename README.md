@@ -13,7 +13,7 @@ case_id,payer,amount,participants
 3,Alice,300,Alice;Eve
 ```
 
-the program calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone. With `method="auto"` or `"exact"` the result uses the fewest payments possible for up to 18 people with non-zero balances; `"heuristic"` and `"greedy"` offer fast, size-unbounded fallbacks that settle everyone but are not guaranteed to use the fewest payments.
+the program calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone. The default `method="auto"` uses `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold. Explicit `"exact2"` and `"exact"` always use exact solvers; `"heuristic"` and `"greedy"` do not guarantee the fewest payments.
 
 ## Files
 
@@ -48,7 +48,7 @@ python run_csv_tests.py inputs.csv
 - **`"greedy"`** — polynomial O(n log n) greedy largest-debtor-to-largest-
   creditor matching over all balances. Fast and size-unbounded, but **not
   guaranteed** minimal (the minimum-transaction problem is NP-hard).
-- **`"auto"`** (default) — `"exact"` for 18 or fewer non-zero balances;
+- **`"auto"`** (default) — `"exact2"` for 18 or fewer non-zero balances;
   warns and falls back to `"greedy"` for larger inputs. The default threshold
   of 18 is adjustable via the `threshold` parameter.
 
