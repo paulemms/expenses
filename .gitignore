@@ -8,3 +8,8 @@ env/
 .spyder/
 .spyproject/
 gui/
+*.aux
+*.log
+*.pdf
+.qwen/tmp/
+.vscode/settings.json
