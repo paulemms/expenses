@@ -1,4 +1,4 @@
-"""Tests for cases where heuristic and exact methods differ."""
+"""Tests for cases where heuristic and exact1 methods differ."""
 
 import unittest
 from settle_expenses import settle_expenses, net_balances
@@ -8,7 +8,7 @@ class TestHeuristicVsExact(unittest.TestCase):
     """Test cases where heuristic produces suboptimal results."""
 
     def test_heuristic_uses_more_payments(self):
-        """Heuristic uses 7 payments while exact uses 6."""
+        """Heuristic uses 7 payments while exact1 uses 6."""
         expenses = [
             {"payer": "A", "amount": 8, "participants": ["A", "C"]},
             {"payer": "E", "amount": 10, "participants": ["E", "C"]},
@@ -20,14 +20,14 @@ class TestHeuristicVsExact(unittest.TestCase):
         ]
 
         heuristic_result = settle_expenses(expenses, "heuristic")
-        exact_result = settle_expenses(expenses, "exact")
+        exact_result = settle_expenses(expenses, "exact1")
 
         self.assertLess(len(exact_result), len(heuristic_result))
         self.assertEqual(len(exact_result), 6)
         self.assertEqual(len(heuristic_result), 7)
 
-    def test_exact_produces_valid_settlement(self):
-        """Exact result must settle all balances to zero."""
+    def test_exact1_produces_valid_settlement(self):
+        """Exact1 result must settle all balances to zero."""
         expenses = [
             {"payer": "A", "amount": 8, "participants": ["A", "C"]},
             {"payer": "E", "amount": 10, "participants": ["E", "C"]},
@@ -38,7 +38,7 @@ class TestHeuristicVsExact(unittest.TestCase):
             {"payer": "I", "amount": 8, "participants": ["I", "H"]},
         ]
 
-        result = settle_expenses(expenses, "exact")
+        result = settle_expenses(expenses, "exact1")
 
         balances = net_balances(expenses)
 

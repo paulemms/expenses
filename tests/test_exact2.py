@@ -72,7 +72,7 @@ class TestExact2(unittest.TestCase):
             ]
             with self.subTest(case=case):
                 result = settle_expenses(expenses, method="exact2")
-                self.assertEqual(len(result), len(settle_expenses(expenses, method="exact")))
+                self.assertEqual(len(result), len(settle_expenses(expenses, method="exact1")))
                 self.assert_settles(expenses, result)
 
     def test_known_optimum_where_heuristic_fails(self):

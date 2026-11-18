@@ -13,7 +13,7 @@ case_id,payer,amount,participants
 3,Alice,300,Alice;Eve
 ```
 
-the program calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone. The default `method="auto"` uses `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold. Explicit `"exact2"` and `"exact"` always use exact solvers; `"heuristic"` and `"greedy"` do not guarantee the fewest payments.
+the program calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone. The default `method="auto"` uses `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold. Explicit `"exact2"` and `"exact1"` always use exact solvers; `"heuristic"` and `"greedy"` do not guarantee the fewest payments.
 
 ## Files
 
@@ -70,7 +70,7 @@ With `n` non-zero balances and `c` disjoint zero-sum subsets found, the minimum 
 
 | Method | Time | Space | Guaranteed minimal? | Size limit |
 |--------|------|-------|---------------------|------------|
-| `exact` | O(3^n) | O(2^n) | Yes | ≤ 18 |
+| `exact1` | O(3^n) | O(2^n) | Yes | ≤ 18 |
 | `exact2` | O(n · 2^n) | O(2^n) | Yes | Any (exponential) |
 | `heuristic` | O(2^n · n) | O(2^n) | No | Any |
 | `greedy` | O(n log n) | O(n) | No | Any |

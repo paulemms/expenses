@@ -11,7 +11,7 @@ Public API:
     parse_csv(csv_path)                 -> Dict[str, List[Expense]]
 
 Method dispatch:
-    "exact"      — bitmask DP, provably minimum for any n (exponential time)
+    "exact1"     — bitmask DP, provably minimum for any n (O(3^n) time)
     "exact2"     — O(n * 2^n) bitmask DP, provably minimum for any n
     "heuristic"  — greedy subset selection, fast for any size
     "greedy"     — polynomial O(n log n), not guaranteed minimal
@@ -80,7 +80,7 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
             - "payer": str
             - "amount": int
             - "participants": List[str]
-        method: "exact" (O(3^n) bitmask DP, provably minimum),
+        method: "exact1" (O(3^n) bitmask DP, provably minimum),
                 "exact2" (O(n * 2^n) bitmask DP, provably minimum),
                 "heuristic" (exponential subset enumeration, near-minimum,
                 may miss the optimum), or "greedy" (polynomial O(n log n)
@@ -97,9 +97,9 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
             - "recipient": str
             - "amount": int
     """
-    if method not in ("auto", "exact", "exact2", "heuristic", "greedy"):
+    if method not in ("auto", "exact1", "exact2", "heuristic", "greedy"):
         raise ValueError(
-            f"Unknown method: {method!r}. Must be 'auto', 'exact', 'exact2', 'heuristic', "
+            f"Unknown method: {method!r}. Must be 'auto', 'exact1', 'exact2', 'heuristic', "
             "or 'greedy'."
         )
 
@@ -138,7 +138,7 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
     if effective_method == "greedy":
         return _greedy_settle_balances(non_zero_balances)
 
-    if effective_method == "exact":
+    if effective_method == "exact1":
         zero_sum_groups = _find_max_zero_sum_subsets_exact(people, non_zero_balances)
     elif effective_method == "exact2":
         zero_sum_groups = _find_max_zero_sum_subsets_exact2(people, non_zero_balances)

@@ -173,7 +173,7 @@ class TestSettleExpenses(unittest.TestCase):
 
 
 class TestSettleExpensesMethods(unittest.TestCase):
-    """Parameterized tests for settle_expenses with 'exact' and 'heuristic' methods."""
+    """Parameterized tests for settle_expenses with 'exact1' and 'heuristic' methods."""
 
     # Shared test scenarios, parameterized across both methods
     _test_scenarios = [
@@ -216,7 +216,7 @@ class TestSettleExpensesMethods(unittest.TestCase):
 
     def _run_scenario(self, scenario_name, expenses, expected):
         """Run a scenario for both methods, asserting identical outcomes."""
-        for method in ("exact", "heuristic"):
+        for method in ("exact1", "heuristic"):
             with self.subTest(method=method, scenario=scenario_name):
                 result = settle_expenses(expenses, method=method)
 
@@ -237,8 +237,8 @@ class TestSettleExpensesMethods(unittest.TestCase):
                     expected_dict = {(e["sender"], e["recipient"]): e["amount"] for e in expected}
                     self.assertEqual(result_dict, expected_dict)
 
-    def test_scenarios_exact(self):
-        """Run all scenarios with 'exact' method."""
+    def test_scenarios_exact1(self):
+        """Run all scenarios with 'exact1' method."""
         for name, expenses, expected in self._test_scenarios:
             self._run_scenario(name, expenses, expected)
 
@@ -247,14 +247,14 @@ class TestSettleExpensesMethods(unittest.TestCase):
         for name, expenses, expected in self._test_scenarios:
             self._run_scenario(name, expenses, expected)
 
-    def test_balances_settle_exact(self):
+    def test_balances_settle_exact1(self):
         """Verify final balances are zero for both methods."""
         expenses = [
             {"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob", "Charlie"]},
             {"payer": "Bob", "amount": 150, "participants": ["Alice", "Bob", "Charlie"]},
             {"payer": "Charlie", "amount": 200, "participants": ["Alice", "Bob", "Charlie"]},
         ]
-        for method in ("exact", "heuristic"):
+        for method in ("exact1", "heuristic"):
             with self.subTest(method=method):
                 result = settle_expenses(expenses, method=method)
                 balances = net_balances(expenses)
@@ -556,8 +556,8 @@ class TestGreedyMethod(unittest.TestCase):
         if non_zero_count:
             self.assertLessEqual(len(result), non_zero_count - 1)
 
-    def test_greedy_matches_exact_on_trivial_scenarios(self):
-        """Where the optimum is obvious, greedy equals exact exactly."""
+    def test_greedy_matches_exact1_on_trivial_scenarios(self):
+        """Where the optimum is obvious, greedy equals exact1 exactly."""
         pinned = [
             ([{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]}],
              [{"sender": "Bob", "recipient": "Alice", "amount": 50}]),
@@ -575,7 +575,7 @@ class TestGreedyMethod(unittest.TestCase):
                 self.assertEqual(result_dict, expected_dict)
 
     def test_greedy_is_optimal_on_known_optimum(self):
-        """On the known-optimum fixture, greedy matches exact (6), not heuristic (7).
+        """On the known-optimum fixture, greedy matches exact1 (6), not heuristic (7).
 
         The fixture has a known optimum of 6 payments; the heuristic misses it
         with 7. Greedy reaches the optimum here, which also confirms the heap
@@ -593,7 +593,7 @@ class TestGreedyMethod(unittest.TestCase):
         result = settle_expenses(expenses, "greedy")
         self._assert_valid(result, expenses, non_zero_count=9)
         self.assertEqual(len(result), 6)
-        self.assertEqual(len(settle_expenses(expenses, "exact")), 6)
+        self.assertEqual(len(settle_expenses(expenses, "exact1")), 6)
 
     def test_greedy_count_matches_reference_matching(self):
         """Greedy's payment count equals the O(n^2) _settle() reference."""
