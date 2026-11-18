@@ -266,7 +266,7 @@ class TestSettleExpensesMethods(unittest.TestCase):
     def test_payer_not_in_participants(self):
         """Payer who is not a participant."""
         expenses = [{"payer": "Dave", "amount": 100, "participants": ["Alice", "Bob"]}]
-        for method in ("exact", "heuristic"):
+        for method in ("exact1", "heuristic"):
             with self.subTest(method=method):
                 result = settle_expenses(expenses, method=method)
                 self.assertTrue(len(result) >= 1)
@@ -279,7 +279,7 @@ class TestSettleExpensesMethods(unittest.TestCase):
             {"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
             {"payer": "Charlie", "amount": 100, "participants": ["Charlie", "Dave"]},
         ]
-        for method in ("exact", "heuristic"):
+        for method in ("exact1", "heuristic"):
             with self.subTest(method=method):
                 result = settle_expenses(expenses, method=method)
                 self.assertTrue(len(result) >= 2)
