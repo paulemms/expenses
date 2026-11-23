@@ -1,6 +1,6 @@
 # Expenses — Settler
 
-A small Python tool that reads a CSV of shared expenses and computes the minimum number of payments needed to settle all debts.
+Python tool that reads a CSV of shared expenses and computes the minimum number of payments needed to settle all debts.
 
 ## What it does
 
@@ -13,17 +13,7 @@ case_id,payer,amount,participants
 3,Alice,300,Alice;Eve
 ```
 
-the program calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone. The default `method="auto"` uses `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold. Explicit `"exact2"` and `"exact1"` always use exact solvers; `"heuristic"` and `"greedy"` do not guarantee the fewest payments.
-
-## Files
-
-| File | Purpose |
-|---|---|
-| `settle_expenses.py` | Core algorithm — parse, validate, and settle |
-| `run_csv_tests.py` | CLI runner — reads a CSV and prints settlements |
-| `tests/test_settle_expenses.py` | Unit tests (standard-library `unittest`) |
-| `tests/test_heuristic_vs_exact.py` | Tests where the heuristic is provably suboptimal vs the exact DP |
-| `tests/data/edge_case_inputs.csv` | Sample / edge-case test data |
+the program calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone. The default `method="auto"` uses method `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold. Explicit `"exact2"` and `"exact1"` always use exact solvers; `"heuristic"` and `"greedy"` do not guarantee the fewest payments.
 
 ## Usage
 
@@ -35,7 +25,7 @@ python run_csv_tests.py inputs.csv
 
 `settle_expenses(expenses, method=...)` accepts:
 
-- **`"exact"`** — bitmask dynamic programming. Returns the
+- **`"exact1"`** — bitmask dynamic programming. Returns the
   provably minimum number of payments for any n (exponential time;
   practical up to ~18 on typical hardware).
 - **`"heuristic"`** — exponential subset enumeration. Near-minimum for any
@@ -54,19 +44,13 @@ python run_csv_tests.py inputs.csv
 
 ## How it works
 
-### Net balance
-
-`net_balances(expenses)` sums paid minus owed per person. Uneven splits distribute the extra cents to **earlier** participants (CSV order) via `divmod(amount, n)`:
+Function `net_balances(expenses)` sums paid minus owed per person. Uneven splits distribute the extra cents to **earlier** participants (CSV order) via `divmod(amount, n)`:
 
 ```
 11 cents among ["A", "B"] → A gets 6, B gets 5
 ```
 
-### Minimum payments = n − c
-
 With `n` non-zero balances and `c` disjoint zero-sum subsets found, the minimum payment count is `n − c`. Each zero-sum subset of size `k` reduces the count by 1 (it can be settled with `k − 1` payments).
-
-### Complexity by method
 
 | Method | Time | Space | Guaranteed minimal? | Size limit |
 |--------|------|-------|---------------------|------------|
@@ -74,12 +58,6 @@ With `n` non-zero balances and `c` disjoint zero-sum subsets found, the minimum 
 | `exact2` | O(n · 2^n) | O(2^n) | Yes | Any (exponential) |
 | `heuristic` | O(2^n · n) | O(2^n) | No | Any |
 | `greedy` | O(n log n) | O(n) | No | Any |
-
-### Design rationale
-
-- **Why `auto` warns + falls back to greedy?** A silent heuristic fallback would return a non-minimal answer that looks correct. The warning keeps the caller informed of the trade-off.
-- **Why `_settle` + `_greedy_settle_balances`?** The former settles individual zero-sum groups (any iterable); the latter settles the full balance set with binary heaps (O(n log n)). They serve different scopes.
-- **Why `frozenset` for subsets?** They are never mutated after creation. Being hashable also allows future optimizations like caching subset indices.
 
 ## Requirements
 
