@@ -17,7 +17,7 @@ case_id,payer,amount,participants
 
 The program `run_csv_tests.py` calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone.
 
-The default `method="auto"` uses method `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold. Explicit `"exact2"` and `"exact1"` always use exact solvers; `"heuristic"` and `"greedy"` do not guarantee the fewest payments.
+The default `--method="auto"` uses method `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold.
 
 ```bash
 python run_csv_tests.py inputs.csv
@@ -37,9 +37,7 @@ Case 3:
 All cases settled successfully.
 ```
 
-## Settlement methods
-
-The script `run_csv_tests.py` defaults to `--method=auto`. The methods implemented are shown below.
+The methods implemented are shown below.
 
 | Method | Description | Time | Space | Guaranteed minimal? |
 |--------|-------------|------|-------|---------------------|
@@ -48,8 +46,6 @@ The script `run_csv_tests.py` defaults to `--method=auto`. The methods implement
 | `heuristic` | Exponential subset enumeration. | O(2^n · n) | O(n · 2^n) | No |
 | `greedy` | Greedy matching of the largest debtor to the largest creditor across all balances. | O(n log n) | O(n) | No |
 | `auto` | Uses `exact2` for 18 or fewer non-zero balances, then warns and falls back to `greedy` for larger inputs. | Varies | Varies | For eligible inputs |
-
-`auto` is the default. The default threshold of 18 is adjustable via the `threshold` parameter.
 
 ## How it works
 
