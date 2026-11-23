@@ -39,7 +39,7 @@ All cases settled successfully.
 
 ## Settlement methods
 
-The script `run_csv_tests.py` wraps `settle_expenses(expenses, method="auto")`, which accepts a list of expense dictionaries and an optional settlement method. The methods implemented are shown below.
+The script `run_csv_tests.py` defaults to `--method=auto`. The methods implemented are shown below.
 
 | Method | Description | Time | Space | Guaranteed minimal? |
 |--------|-------------|------|-------|---------------------|

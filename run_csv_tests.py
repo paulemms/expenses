@@ -2,16 +2,22 @@
 run_csv_tests.py — Loads the CSV file and executes each test case.
 """
 
+import argparse
 import sys
 from settle_expenses import settle_expenses, parse_csv, net_balances
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python run_csv_tests.py <csv_file>")
-        sys.exit(1)
-
-    csv_path = sys.argv[1]
+    parser = argparse.ArgumentParser(description="Settle shared expenses from a CSV file.")
+    parser.add_argument("csv_file", help="Path to the input CSV file")
+    parser.add_argument(
+        "--method",
+        choices=("auto", "exact1", "exact2", "heuristic", "greedy"),
+        default="auto",
+        help="Settlement method (default: auto)",
+    )
+    args = parser.parse_args()
+    csv_path = args.csv_file
 
     try:
         expenses_by_case = parse_csv(csv_path)
@@ -29,7 +35,7 @@ def main():
     for case_id in sorted(expenses_by_case.keys(), key=lambda x: (len(x), x)):
         expenses = expenses_by_case[case_id]
         try:
-            payments = settle_expenses(expenses, threshold=18)
+            payments = settle_expenses(expenses, method=args.method, threshold=18)
         except ValueError as e:
             print(f"Case {case_id}:")
             print(f"  ERROR: {e}")
