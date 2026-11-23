@@ -11,5 +11,5 @@ gui/
 *.aux
 *.log
 *.pdf
-.qwen/tmp/
+.qwen/
 .vscode/settings.json
