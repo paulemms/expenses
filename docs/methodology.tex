@@ -45,7 +45,7 @@ We prove correctness for all three, establish the $n-c$ lower bound on payment c
 A list of expenses, each represented as a triple $(p, A, U)$ where:
 \begin{itemize}
   \item $p$ is the payer (a string identifier),
-  \item $A$ is the total amount in non-negative integer cents,
+  \item $A$ is the total amount, a non-negative dimensionless integer,
   \item $U$ is the multiset of participants sharing the expense.
 \end{itemize}
 
@@ -76,7 +76,7 @@ For an expense $(p, A, U)$ with $|U| = m$ participants, the share of each partic
   \end{cases}
 \]
 
-This implements \texttt{divmod(A, m)}: the first \texttt{(A mod m)} participants receive the extra cent each. The shares partition $A$ exactly:
+This implements \texttt{divmod(A, m)}: the first \texttt{(A mod m)} participants each have 1 added to their share. The shares partition $A$ exactly:
 \[
   \sum_{u \in U} s_u = m \cdot \left\lfloor \frac{A}{m} \right\rfloor + (A \bmod m) = A.
 \]

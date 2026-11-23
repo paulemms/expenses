@@ -40,7 +40,7 @@ def main():
             print("  No payments required.")
         else:
             for p in payments:
-                print(f"  {p['sender']} -> {p['recipient']}: {p['amount']} cents")
+                print(f"  {p['sender']} -> {p['recipient']}: {p['amount']}")
 
         # Verify all balances are zero
         balances = net_balances(expenses)

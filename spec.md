@@ -28,7 +28,7 @@ case\_id: Identifies an independent test case.
 
 payer: Name of the person who paid the expense.
 
-amount: Expense amount in integer cents.
+amount: Non-negative integer expense amount.
 
 participants: Semicolon-separated list of people sharing the expense.
 
@@ -52,7 +52,7 @@ Use Python's standard-library csv module.
 
 EXPENSE RULES
 
-All monetary amounts are expressed in integer cents.
+All amounts are dimensionless integers.
 
 Each expense is split equally among its participants.
 
@@ -76,19 +76,19 @@ Rounding rule:
 
 
 
-If an expense cannot be divided equally into whole cents, allocate the remaining cents one at a time to participants in the order listed in the CSV.
+If an expense cannot be divided equally into integer shares, allocate the remainder one at a time to participants in the order listed in the CSV.
 
 
 
-For example, 100 cents shared by Alice, Bob and Charlie is allocated as follows:
+For example, an amount of 100 shared by Alice, Bob and Charlie is allocated as follows:
 
 
 
-Alice: 34 cents
+Alice: 34
 
-Bob: 33 cents
+Bob: 33
 
-Charlie: 33 cents
+Charlie: 33
 
 
 
@@ -166,7 +166,7 @@ Each payment dictionary must have this structure:
 
 
 
-Payment amounts must be positive integers representing cents.
+Payment amounts must be positive integers.
 
 
 
@@ -188,9 +188,9 @@ Interpret balances as follows:
 
 
 
-Positive balance: the person is owed money.
+Positive balance: the person has an amount to receive.
 
-Negative balance: the person owes money.
+Negative balance: the person has an amount to pay.
 
 Zero balance: the person has nothing to pay or receive.
 
@@ -288,7 +288,7 @@ Negative amounts.
 
 Non-integer amounts.
 
-Boolean values used as monetary amounts.
+Boolean values used as amounts.
 
 Malformed CSV rows.
 
@@ -310,7 +310,7 @@ Example:
 
 
 
-Case 1: Bob -> Alice: 250 cents
+Case 1: Bob -> Alice: 250
 
 
 
@@ -372,13 +372,13 @@ Different participant groups within one case.
 
 Multiple independent cases in one CSV.
 
-Large monetary amounts.
+Large integer amounts.
 
 Names containing spaces and Unicode characters.
 
 Invalid CSV columns and malformed rows.
 
-Duplicate participants and invalid monetary amounts.
+Duplicate participants and invalid amounts.
 
 Cases with multiple possible settlements.
 

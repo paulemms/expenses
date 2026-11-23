@@ -1,4 +1,4 @@
-# QWEN.md — Expenses Settler Project Context
+# AGENTS.md — Expenses Settler Project Context
 
 ## Project Overview
 
@@ -56,7 +56,8 @@ python run_csv_tests.py edge_case_inputs.csv
 
 ### Net Balance Computation (`net_balances()`)
 - For each expense, credit the payer their full amount, debit each participant their share.
-- Uneven splits: `divmod(amount, n)` — remainder cents go to earlier participants (CSV order).
+- All amounts are dimensionless integers.
+- Uneven splits: `divmod(amount, n)` — the remainder is allocated one at a time to earlier participants (CSV order).
 - Returns `{person: net_balance}` where positive = owed, negative = owes.
 
 ### Settlement Algorithm (`settle_expenses()`)
@@ -98,7 +99,7 @@ python run_csv_tests.py edge_case_inputs.csv
 ```python
 Expense = Dict[str, object]   # {"payer": str, "amount": int, "participants": List[str]}
 Payment = Dict[str, object]   # {"from": str, "to": str, "amount": int}
-Balances = Dict[str, int]     # {person: net_balance_cents}
+Balances = Dict[str, int]     # {person: net_balance}
 ```
 
 ---
@@ -109,7 +110,7 @@ Balances = Dict[str, int]     # {person: net_balance_cents}
 ```python
 {
     "payer": "Alice",              # str, non-empty after strip
-    "amount": 1000,                # int (cents), must be >= 0
+    "amount": 1000,                # int, must be >= 0
     "participants": ["Alice", "Bob"]  # List[str], no duplicates, non-empty
 }
 ```
@@ -119,7 +120,7 @@ Balances = Dict[str, int]     # {person: net_balance_cents}
 {
     "from": "Bob",                 # str, person paying
     "to": "Alice",                 # str, person receiving
-    "amount": 500                  # int (cents), must be > 0
+    "amount": 500                  # int, must be > 0
 }
 ```
 
@@ -173,7 +174,7 @@ case_id,payer,amount,participants
 ## Important Implementation Notes
 
 ### Rounding Rule
-Uneven splits allocate remainder cents to **earlier** participants (CSV order):
+Uneven splits allocate the remainder one at a time to **earlier** participants (CSV order):
 ```python
 base_share, remainder = divmod(amount, n)
 # First `remainder` participants get base_share + 1

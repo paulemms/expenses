@@ -51,7 +51,7 @@ ID & Location & Issue & Severity \\
 \midrule
 M1 & tex:115 & Theorem statement is false as written (feasible settlements are unbounded) & High \\
 M2 & tex:126 & Lower-bound arithmetic error plus a missing step that the proof actually needs & High \\
-M3 & tex:129, 222 & "Exactly $k-1$ payments" is false; counterexample with two 5-cent payments & High \\
+M3 & tex:129, 222 & "Exactly $k-1$ payments" is false; counterexample with two payments of 5 & High \\
 M4 & tex:32, 143 & $\min(n-c,\, n-1)$ is redundant; the second branch never occurs & Medium \\
 M5 & tex:242 & Optimality proof cites a lemma that does not prove DP optimality & High \\
 M6 & tex:209--220 & Reconstruction lemma rests on an unstated invariant & Medium \\
@@ -114,7 +114,7 @@ formal argument is:
 \begin{enumerate}
   \item Take any feasible settlement $P$ with $t$ payments and build the multigraph with vertex set $S$
 and one edge per payment.
-  \item Each connected component has zero total balance (payments only move money inside a component),
+  \item Each connected component has zero total balance (payments only transfer amounts inside a component),
 so each component is a zero-sum subset of $S$.
   \item A component on $k$ vertices needs at least $k-1$ edges. Summing over components,
 $t \ge \sum_{\text{comp}} (k-1)$, which equals $n$ minus the number of components.
@@ -246,7 +246,7 @@ run. The $O(n \log n)$ conclusion is unchanged either way.
 \end{quote}
 
 This only holds when the payer \emph{is} the participant. If the lone participant is someone else, the
-expense moves money: the payer gets $+A$ and the participant $-A$, and \texttt{net\_balances} produces
+expense transfers an amount: the payer gets $+A$ and the participant $-A$, and \texttt{net\_balances} produces
 exactly that. The next subsection (tex:373) already states the non-participant case, which is how the
 error is visible: the two subsections contradict each other for $|U|=1$ and payer not in $U$.
 
@@ -258,7 +258,7 @@ Two problems:
 \begin{itemize}
   \item Shares are the rounded-up or rounded-down value, so the correct bound is
 $s_p \le \lceil A/m \rceil$. That can equal $A$ even for $m \ge 2$.
-  \item The conclusion fails when it does equal $A$: with $A = 1$ cent, $m = 2$, and the payer among the
+  \item The conclusion fails when it does equal $A$: with $A = 1$, $m = 2$, and the payer among the
 first $A \bmod m = 1$ participant, $s_p = 1 = A$ and the payer's net contribution from that expense is
 $0$. Also $0$ for $A = 0$.
 \end{itemize}
@@ -430,7 +430,7 @@ Worth recording so the fixes above can be targeted rather than sweeping:
 
 \begin{itemize}
   \item The rounding rule (tex:68--82) matches \texttt{divmod} in \texttt{net\_balances}
-(\texttt{settle\_expenses.py:57--66}) exactly, including "extra cents to earlier participants in CSV
+(\texttt{settle\_expenses.py:57--66}) exactly, including "the remainder allocated one at a time to earlier participants in CSV
 order", and the partition identity $\sum_u s_u = A$ is correct.
   \item The Zero-Sum Invariant (tex:84--96) and its proof are correct and are used correctly later.
   \item The bitmask encoding, the zero-sum precomputation cost $O(n \cdot 2^n)$, the submask iteration

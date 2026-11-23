@@ -2,9 +2,11 @@
 
 Python tool that reads a CSV of shared expenses and computes the minimum number of payments needed to settle all debts.
 
+All amounts are dimensionless integers.
+
 ## What it does
 
-Given a CSV like:
+Suppose an input file `inputs.csv` contains
 
 ```csv
 case_id,payer,amount,participants
@@ -13,26 +15,26 @@ case_id,payer,amount,participants
 3,Alice,300,Alice;Eve
 ```
 
-the program calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone. The default `method="auto"` uses method `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold. Explicit `"exact2"` and `"exact1"` always use exact solvers; `"heuristic"` and `"greedy"` do not guarantee the fewest payments.
+The program `run_csv_tests.py` calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone.
+
+The default `method="auto"` uses method `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold. Explicit `"exact2"` and `"exact1"` always use exact solvers; `"heuristic"` and `"greedy"` do not guarantee the fewest payments.
+
+```bash
+python run_csv_tests.py inputs.csv
+```
 
 Expected output (payment order may vary):
 
 ```text
 Case 1:
-  Bob -> Alice: 333 cents
-  Charlie -> Alice: 333 cents
+  Bob -> Alice: 333
+  Charlie -> Alice: 333
 Case 2:
-  Dave -> Bob: 250 cents
+  Dave -> Bob: 250
 Case 3:
-  Eve -> Alice: 150 cents
+  Eve -> Alice: 150
 
 All cases settled successfully.
-```
-
-## Usage
-
-```bash
-python run_csv_tests.py inputs.csv
 ```
 
 ## Settlement methods
@@ -51,10 +53,10 @@ python run_csv_tests.py inputs.csv
 
 ## How it works
 
-Function `net_balances(expenses)` sums paid minus owed per person. Uneven splits distribute the extra cents to **earlier** participants (CSV order) via `divmod(amount, n)`:
+Function `net_balances(expenses)` sums paid minus owed per person. Uneven splits distribute the remainder one at a time to **earlier** participants (CSV order) via `divmod(amount, n)`:
 
 ```
-11 cents among ["A", "B"] → A gets 6, B gets 5
+11 among ["A", "B"] → A gets 6, B gets 5
 ```
 
 With `n` non-zero balances and `c` disjoint zero-sum subsets found, the minimum payment count is `n − c`. Each zero-sum subset of size `k` reduces the count by 1 (it can be settled with `k − 1` payments).

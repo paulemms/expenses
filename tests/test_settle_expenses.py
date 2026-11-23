@@ -51,7 +51,7 @@ class TestSettleExpenses(unittest.TestCase):
         self.assertEqual(amounts_from.get("Charlie"), 100)
 
     def test_uneven_split(self):
-        """Uneven split: 100 cents among 3 people."""
+        """Uneven split: 100 among 3 people."""
         expenses = [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob", "Charlie"]}]
         result = settle_expenses(expenses)
         self.assertTrue(all(p["amount"] > 0 for p in result))
@@ -87,7 +87,7 @@ class TestSettleExpenses(unittest.TestCase):
         self.assertTrue(len(result) >= 2)
 
     def test_large_amount(self):
-        """Large monetary amount."""
+        """Large integer amount."""
         expenses = [{"payer": "Alice", "amount": 1000000, "participants": ["Alice", "Bob"]}]
         result = settle_expenses(expenses)
         self.assertEqual(len(result), 1)

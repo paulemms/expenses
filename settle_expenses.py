@@ -52,7 +52,7 @@ def net_balances(expenses: List[Expense]) -> Balances:
 
     Returns:
         A dictionary mapping person names to their net balance
-        (positive = owed money, negative = owes money).
+        (positive = amount to receive, negative = amount to pay).
     """
     balances = {}
     for exp in expenses:
@@ -65,7 +65,7 @@ def net_balances(expenses: List[Expense]) -> Balances:
         base_share, remainder = divmod(amount, n)
         balances[payer] = balances.get(payer, 0) + amount
 
-        # Spread 1 cent over remainder participants
+        # Add 1 to the share of each of the first remainder participants
         for i, person in enumerate(participants):
             share = base_share + (1 if i < remainder else 0)
             balances[person] = balances.get(person, 0) - share

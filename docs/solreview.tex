@@ -32,8 +32,8 @@ actual differences between the exposition and implementation.
 \subsection{The $n-1$ theorem has the wrong quantifier}
 
 Section 3 states that \emph{any feasible settlement} uses at most $n-1$
-payments. Feasibility imposes no such upper bound: a debt of two cents can
-be paid in two one-cent transfers, although $n=2$. Splitting a payment can
+payments. Feasibility imposes no such upper bound: a debt of 2 can
+be paid in two transfers of 1, although $n=2$. Splitting a payment can
 increase the count further whenever the amount permits it. The intended
 claim is that \emph{there exists} a feasible settlement with at most $n-1$
 payments, for $n>0$, and hence the optimum has that upper bound.
@@ -255,7 +255,7 @@ not $3^n/2$. The asymptotic bound is unchanged.
 all bits takes $O(n2^n)$ time but storing integer zero-sum masks takes
 $O(2^n)$ space in the usual word model. Section 4's enumeration paragraph
 and its summary table currently disagree. Mention the computational model
-if bit lengths of masks or monetary amounts are included.
+if bit lengths of masks or integer amounts are included.
 
 \item \textbf{Correct intra-group cost.} The implemented scan-based
 \texttt{\_settle} takes $O(k^2)$ time for a group of size $k$.
@@ -319,9 +319,9 @@ the payer. If payer $P$ pays $A$ for sole participant $Q\ne P$, their
 balances change by $+A$ and $-A$.
 \item Rounding permits a share of $\lceil A/m\rceil$, so
 $s_p\leq A/m$ is false. A payer-participant has a nonnegative net
-contribution from that expense, which need not be positive: with one
-cent split between two people and the payer first, the payer's share is
-one cent and their net is zero. Include $A=0$ explicitly.
+contribution from that expense, which need not be positive: with an amount
+of 1 split between two people and the payer first, the payer's share is
+1 and their net is zero. Include $A=0$ explicitly.
 \item In the positivity invariant use $\min(-b_d,b_c)$ or
 $\min(d_d,c_c)$ consistently. If $d_d$ already denotes positive debt,
 negating it makes the asserted positive amount negative.
@@ -484,7 +484,7 @@ tables. Finally replace unsupported examples and timing claims with
 checkable evidence.
 
 For a future implementation validation pass, useful cases include the empty
-instance, a sole participant different from the payer, one-cent rounding,
+instance, a sole participant different from the payer, rounding an amount of 1,
 the two-person heap-sign example, the nine-person heuristic fixture, and
 generic reconstruction from a mask that requires skipping its lowest bit.
 For small zero-sum instances, compare exact output counts against an
