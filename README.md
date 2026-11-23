@@ -1,4 +1,4 @@
-# Expenses — Settler
+# Expenses Settler
 
 Python tool that reads a CSV of shared expenses and computes the minimum number of payments needed to settle all debts.
 
@@ -15,6 +15,20 @@ case_id,payer,amount,participants
 
 the program calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone. The default `method="auto"` uses method `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold. Explicit `"exact2"` and `"exact1"` always use exact solvers; `"heuristic"` and `"greedy"` do not guarantee the fewest payments.
 
+Expected output (payment order may vary):
+
+```text
+Case 1:
+  Bob -> Alice: 333 cents
+  Charlie -> Alice: 333 cents
+Case 2:
+  Dave -> Bob: 250 cents
+Case 3:
+  Eve -> Alice: 150 cents
+
+All cases settled successfully.
+```
+
 ## Usage
 
 ```bash
@@ -29,7 +43,7 @@ python run_csv_tests.py inputs.csv
 |--------|-------------|------|-------|---------------------|
 | `exact1` | Bitmask dynamic programming, practical up to about 18 non-zero balances. | O(3^n) | O(2^n) | Yes |
 | `exact2` | Bitmask dynamic programming with no enforced size limit. Time and memory still grow exponentially. | O(n · 2^n) | O(2^n) | Yes |
-| `heuristic` | Exponential subset enumeration. | O(2^n · n) | O(2^n) | No |
+| `heuristic` | Exponential subset enumeration. | O(2^n · n) | O(n · 2^n) | No |
 | `greedy` | Greedy matching of the largest debtor to the largest creditor across all balances. | O(n log n) | O(n) | No |
 | `auto` | Uses `exact2` for 18 or fewer non-zero balances, then warns and falls back to `greedy` for larger inputs. | Varies | Varies | For eligible inputs |
 
