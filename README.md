@@ -25,22 +25,15 @@ python run_csv_tests.py inputs.csv
 
 `settle_expenses(expenses, method=...)` accepts:
 
-- **`"exact1"`** — bitmask dynamic programming. Returns the
-  provably minimum number of payments for any n (exponential time;
-  practical up to ~18 on typical hardware).
-- **`"heuristic"`** — exponential subset enumeration. Near-minimum for any
-  size, but **not guaranteed** to use the fewest payments (see
-  `tests/test_heuristic_vs_exact.py`).
-- **`"exact2"`** — bitmask dynamic programming in O(n · 2^n) time and
-  O(2^n) space. Returns the provably minimum number of payments, with no
-  enforced size limit; time and memory still grow exponentially. Select with
-  `settle_expenses(expenses, method="exact2")`.
-- **`"greedy"`** — polynomial O(n log n) greedy largest-debtor-to-largest-
-  creditor matching over all balances. Fast and size-unbounded, but **not
-  guaranteed** minimal (the minimum-transaction problem is NP-hard).
-- **`"auto"`** (default) — `"exact2"` for 18 or fewer non-zero balances;
-  warns and falls back to `"greedy"` for larger inputs. The default threshold
-  of 18 is adjustable via the `threshold` parameter.
+| Method | Description | Time | Space | Guaranteed minimal? |
+|--------|-------------|------|-------|---------------------|
+| `exact1` | Bitmask dynamic programming, practical up to about 18 non-zero balances. | O(3^n) | O(2^n) | Yes |
+| `exact2` | Bitmask dynamic programming with no enforced size limit. Time and memory still grow exponentially. | O(n · 2^n) | O(2^n) | Yes |
+| `heuristic` | Exponential subset enumeration. | O(2^n · n) | O(2^n) | No |
+| `greedy` | Greedy matching of the largest debtor to the largest creditor across all balances. | O(n log n) | O(n) | No |
+| `auto` | Uses `exact2` for 18 or fewer non-zero balances, then warns and falls back to `greedy` for larger inputs. | Varies | Varies | For eligible inputs |
+
+`auto` is the default. The default threshold of 18 is adjustable via the `threshold` parameter.
 
 ## How it works
 
@@ -51,13 +44,6 @@ Function `net_balances(expenses)` sums paid minus owed per person. Uneven splits
 ```
 
 With `n` non-zero balances and `c` disjoint zero-sum subsets found, the minimum payment count is `n − c`. Each zero-sum subset of size `k` reduces the count by 1 (it can be settled with `k − 1` payments).
-
-| Method | Time | Space | Guaranteed minimal? | Size limit |
-|--------|------|-------|---------------------|------------|
-| `exact1` | O(3^n) | O(2^n) | Yes | ≤ 18 |
-| `exact2` | O(n · 2^n) | O(2^n) | Yes | Any (exponential) |
-| `heuristic` | O(2^n · n) | O(2^n) | No | Any |
-| `greedy` | O(n log n) | O(n) | No | Any |
 
 ## Requirements
 
