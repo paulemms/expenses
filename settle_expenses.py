@@ -149,7 +149,7 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
     if effective_method == "exact0":
         zero_sum_groups = _find_max_zero_sum_subsets_exact0(people, non_zero_balances)
     elif effective_method == "exact1":
-        zero_sum_groups = _find_max_zero_sum_subsets_exact(people, non_zero_balances)
+        zero_sum_groups = _find_max_zero_sum_subsets_exact1(people, non_zero_balances)
     elif effective_method == "exact2":
         zero_sum_groups = _find_max_zero_sum_subsets_exact2(people, non_zero_balances)
     else:
@@ -307,7 +307,7 @@ def _find_max_zero_sum_subsets_exact0(people: List[str], balances: Balances) -> 
     ]
 
 
-def _find_max_zero_sum_subsets_exact(people: List[str], balances: Balances) -> List[frozenset]:
+def _find_max_zero_sum_subsets_exact1(people: List[str], balances: Balances) -> List[frozenset]:
     """Find maximum disjoint zero-sum subsets using cached bottom-up bitmask DP.
 
     Evaluate the Bellman recurrence once for each subset and cache its best

@@ -7,7 +7,7 @@ import warnings
 from unittest.mock import patch
 
 from settle_expenses import (
-    _find_max_zero_sum_subsets_exact,
+    _find_max_zero_sum_subsets_exact1,
     _find_max_zero_sum_subsets_exact2,
     net_balances,
     settle_expenses,
@@ -21,7 +21,7 @@ class TestExact2(unittest.TestCase):
             "settle_expenses._find_max_zero_sum_subsets_exact2",
             wraps=_find_max_zero_sum_subsets_exact2,
         ) as primary, patch(
-            "settle_expenses._find_max_zero_sum_subsets_exact",
+            "settle_expenses._find_max_zero_sum_subsets_exact1",
             side_effect=AssertionError("auto must use exact2"),
         ):
             result = settle_expenses(expenses, threshold=2)
@@ -56,7 +56,7 @@ class TestExact2(unittest.TestCase):
                 with self.subTest(values=values):
                     balances = dict(zip(people, values))
                     groups = _find_max_zero_sum_subsets_exact2(people, balances)
-                    reference = _find_max_zero_sum_subsets_exact(people, balances)
+                    reference = _find_max_zero_sum_subsets_exact1(people, balances)
                     self.assertEqual(len(groups), len(reference))
                     members = [person for group in groups for person in group]
                     self.assertCountEqual(members, people)

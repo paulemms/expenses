@@ -1,6 +1,6 @@
-# Expenses Settler
+# The Expenses Settlement Problem
 
-Python tool that reads a CSV of shared expenses and computes the minimum number of payments needed to settle all debts.
+Python tool that reads a CSV of shared expenses and tries to calculate the minimum number of payments needed to settle all debts using a variety of algorithms.
 
 All amounts are dimensionless integers.
 

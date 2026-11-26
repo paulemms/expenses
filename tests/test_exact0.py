@@ -5,7 +5,7 @@ import unittest
 import warnings
 
 from settle_expenses import (
-    _find_max_zero_sum_subsets_exact,
+    _find_max_zero_sum_subsets_exact1,
     _find_max_zero_sum_subsets_exact0,
     settle_expenses,
 )
@@ -30,7 +30,7 @@ class TestExact0(unittest.TestCase):
                 with self.subTest(values=values):
                     balances = dict(zip(people, values))
                     groups = _find_max_zero_sum_subsets_exact0(people, balances)
-                    reference = _find_max_zero_sum_subsets_exact(people, balances)
+                    reference = _find_max_zero_sum_subsets_exact1(people, balances)
                     self.assertEqual(len(groups), len(reference))
                     members = [person for group in groups for person in group]
                     self.assertCountEqual(members, people)

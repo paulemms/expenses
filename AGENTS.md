@@ -97,7 +97,7 @@ python run_csv_tests.py edge_case_inputs.csv
 | `parse_csv(csv_path)` | settle_expenses.py | Parse CSV into `{case_id: [expenses]}` dict |
 | `_settle(people, balances)` | settle_expenses.py | Internal: greedy settlement for a zero-sum group |
 | `_find_max_zero_sum_subsets_exact0()` | settle_expenses.py | Internal: recursive optimal partition search without caching |
-| `_find_max_zero_sum_subsets_exact()` | settle_expenses.py | Internal: exact1, bottom-up bitmask DP with cached subset results |
+| `_find_max_zero_sum_subsets_exact1()` | settle_expenses.py | Internal: exact1, bottom-up bitmask DP with cached subset results |
 | `_find_max_zero_sum_subsets_exact2()` | settle_expenses.py | Internal: exact2, cached zero-sum prefix counts with one-person transitions |
 | `_find_max_zero_sum_subsets_heuristic()` | settle_expenses.py | Internal: greedy subset enumeration |
 | `_greedy_settle_balances(balances)` | settle_expenses.py | Internal: O(n log n) greedy matching over all balances via two binary heaps |
