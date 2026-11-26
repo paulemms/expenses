@@ -86,8 +86,10 @@ python -m unittest discover -v
 
 ## Related work
 
-These papers cover stochastic search methods for combinatorial optimisation and related partitioning problems. Applying them to minimum-payment settlement would require adapting and evaluating them for the zero-sum group objective.
+These papers cover stochastic search methods for combinatorial optimisation and practical clearing procedures for invoice networks. Their methods and objectives would need to be adapted and evaluated for minimum-payment settlement.
 
+- Peplluis de la Rosa Esteva and Sai Srikanth Madugula, [Multilateral Clearing on Invoice Graphs: Path Enabled Compensation Versus Cycle Restricted Netting](https://arxiv.org/abs/2606.26126), arXiv preprint (June 2026). Compares deterministic clearing procedures on real invoice networks, using local three-party reductions that preserve net positions. Focuses on reducing outstanding obligations rather than guaranteeing the fewest payments.
+- Peplluis Esteva de la Rosa and Sai Srikanth Madugula, [Atomic Common-Day Invoice Clearing under Causal Daily Scheduling: Path-Enabled and Bounded-Cycle Policies](https://arxiv.org/abs/2608.23060), arXiv preprint (August 2026). Extends clearing to invoices with dates and execution constraints. Compares practical policies and distinguishes their benefits from global optimality.
 - Thomas A. Feo and Mauricio G. C. Resende, [Greedy Randomized Adaptive Search Procedures](https://mauricio.resende.info/doc/gtut.pdf), *Journal of Global Optimization*, 6 (1995). Introduces GRASP: repeated randomised greedy construction followed by local improvement.
 - David S. Johnson, Cecilia R. Aragon, Lyle A. McGeoch, and Catherine Schevon, [Optimization by Simulated Annealing: An Experimental Evaluation; Part II, Graph Coloring and Number Partitioning](https://doi.org/10.1287/opre.39.3.378), *Operations Research*, 39(3), 378–406 (1991). Compares simulated annealing with other heuristics, including repeated local search, on related optimisation problems.
 - S. Kirkpatrick, C. D. Gelatt Jr., and M. P. Vecchi, [Optimization by Simulated Annealing](https://doi.org/10.1126/science.220.4598.671), *Science*, 220(4598), 671–680 (1983). Introduces simulated annealing for optimisation, using probabilistic acceptance of worse solutions to escape local optima.
