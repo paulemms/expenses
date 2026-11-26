@@ -4,7 +4,7 @@
 
 This project implements a **minimum-payment expense settlement algorithm**. Given a CSV of shared expenses (who paid what, who shares), it computes each person's net balance and produces the globally minimum set of payments to settle all debts.
 
-**Core innovation**: Uses bitmask dynamic programming to find maximum disjoint zero-sum subsets, achieving optimal payment counts for small cases (≤18 people), with a heuristic fallback and a faster polynomial greedy for larger inputs.
+**Core innovation**: Uses cached bitmask dynamic programming to maximize the number of independent zero-sum groups. The default `auto` selects `exact2`, which caches zero-sum prefix counts using one-person transitions, for up to 18 non-zero balances; above that it warns and falls back to polynomial `greedy` settlement.
 
 **Key constraint**: Python 3.8+ standard library only — no external dependencies.
 
@@ -64,14 +64,22 @@ python run_csv_tests.py edge_case_inputs.csv
 1. Compute net balances via `net_balances()`.
 2. Filter to non-zero balances.
 3. Dispatch by method:
-   - **Exact** (`method="exact"`): bitmask DP for maximum disjoint zero-sum
-     subsets, O(3^n) time / O(2^n) space. Limited to ≤18 people.
+   - **Recursive exact** (`method="exact0"`): exhaustive zero-sum partition
+     search without caching. Super-exponential worst-case time, O(n) space.
+   - **Cached exact** (`method="exact1"`): bottom-up bitmask DP for maximum
+     disjoint zero-sum subsets. Caches the optimal group count for each subset
+     and reuses it when solving larger subsets. O(3^n) time / O(2^n) space;
+     practical for small inputs (about 18 non-zero balances), no enforced limit.
+   - **Faster cached exact** (`method="exact2"`): bottom-up bitmask DP that
+     maximizes zero-sum prefixes in an ordering of each subset. Caches subset
+     sums and best prefix counts; tries each person as the last one added.
+     O(n*2^n) time / O(2^n) space, with no enforced size limit.
    - **Heuristic** (`method="heuristic"`): exponential smallest-subset-first
      enumeration — kept as the exponential fallback, not provably optimal.
    - **Greedy** (`method="greedy"`): polynomial O(n log n) greedy
      largest-debtor-to-largest-creditor matching over all balances at once via
      two binary heaps. Not guaranteed minimal, no size limit.
-   - **Auto** (`method="auto"`): exact for n≤18; **warns + falls back to greedy** for n>18.
+   - **Auto** (`method="auto"`): `exact2` for n≤18; **warns + falls back to greedy** for n>18.
 4. For the exact/heuristic paths, settle each zero-sum subset with greedy
    largest-debtor-to-largest-creditor matching, then settle remaining people.
 
@@ -88,7 +96,9 @@ python run_csv_tests.py edge_case_inputs.csv
 | `validate_expense(expense, row_num)` | settle_expenses.py | Validate a single expense dict, raise ValueError |
 | `parse_csv(csv_path)` | settle_expenses.py | Parse CSV into `{case_id: [expenses]}` dict |
 | `_settle(people, balances)` | settle_expenses.py | Internal: greedy settlement for a zero-sum group |
-| `_find_max_zero_sum_subsets_exact()` | settle_expenses.py | Internal: bitmask DP for optimal subset selection |
+| `_find_max_zero_sum_subsets_exact0()` | settle_expenses.py | Internal: recursive optimal partition search without caching |
+| `_find_max_zero_sum_subsets_exact()` | settle_expenses.py | Internal: exact1, bottom-up bitmask DP with cached subset results |
+| `_find_max_zero_sum_subsets_exact2()` | settle_expenses.py | Internal: exact2, cached zero-sum prefix counts with one-person transitions |
 | `_find_max_zero_sum_subsets_heuristic()` | settle_expenses.py | Internal: greedy subset enumeration |
 | `_greedy_settle_balances(balances)` | settle_expenses.py | Internal: O(n log n) greedy matching over all balances via two binary heaps |
 
@@ -159,12 +169,12 @@ case_id,payer,amount,participants
 
 ### `test_settle_expenses.py`
 - **TestSettleExpenses**: Core settlement behavior (15 tests)
-- **TestSettleExpensesMethods**: Same scenarios run under both `exact` and `heuristic` (5 tests)
+- **TestSettleExpensesMethods**: Same scenarios run under both `exact1` (cached DP) and `heuristic` (5 tests)
 - **TestValidateExpense**: Validation edge cases (9 tests)
 - **TestParseCsv**: CSV parsing and error handling (7 tests)
 - **TestMinimumPayments**: Optimal payment count verification (3 tests)
 - **TestNetBalances**: Net balance computation correctness (7 tests)
-- **TestGreedyMethod**: O(n log n) greedy method (validity, n-1 bound, matches `exact` on trivial cases, no size limit, count matches `_settle` reference)
+- **TestGreedyMethod**: O(n log n) greedy method (validity, n-1 bound, matches `exact1` on trivial cases, no size limit, count matches `_settle` reference)
 
 ### `test_heuristic_vs_exact.py`
 - Proof that heuristic is suboptimal on crafted input (7 payments vs 6)
@@ -181,10 +191,26 @@ base_share, remainder = divmod(amount, n)
 ```
 
 ### Zero-Sum Subset Discovery
-The exact DP precomputes all zero-sum masks, then uses parent pointers for reconstruction. The heuristic sorts all zero-sum subsets by size and greedily selects non-overlapping ones.
+`exact1` precomputes all zero-sum masks and evaluates the Bellman recurrence
+bottom-up. It caches the maximum group count for each subset in `dp[mask]`,
+so larger subsets reuse previous results. Parent pointers reconstruct the
+chosen groups. `exact0` recursively explores partitions without caching.
+`exact2` uses a different Bellman recurrence: its cached value is the maximum
+number of nonempty zero-sum prefixes in any ordering of a subset. Try each
+person as the last one added, reuse the predecessor's count, and add one if
+the subset sum is zero. Every return to zero marks a group boundary. The
+subset sums are cached too. This reduces the work per k-person subset from
+2^(k-1) candidate groups in `exact1` to k transitions in `exact2`, giving
+O(n*2^n) time and O(2^n) space. Parent bits recover the ordering and groups.
+The heuristic sorts all zero-sum subsets by size and greedily selects
+non-overlapping ones.
 
 ### Known Limitation
-Exact DP has O(3^n) complexity — practical limit is n≈18. For larger inputs, the heuristic is used automatically but is not provably optimal.
+`exact1` still takes O(3^n) time despite caching, with O(2^n) space; explicit
+`exact1` has no enforced size limit. The default `auto` uses `exact2` up to
+18 non-zero balances, then warns and falls back to `greedy`.
+`exact2` also has exponential time and memory requirements despite its
+smaller transition count; increasing the `auto` threshold increases both.
 
 ### Payer-as-Participant
 When the payer is also a participant, they receive +amount (credited) and -share (debited). Net effect: `payer_balance = amount - share`.

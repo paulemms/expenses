@@ -11,8 +11,11 @@ Public API:
     parse_csv(csv_path)                 -> Dict[str, List[Expense]]
 
 Method dispatch:
-    "exact1"     — bitmask DP, provably minimum for any n (O(3^n) time)
-    "exact2"     — O(n * 2^n) bitmask DP, provably minimum for any n
+    "exact0"     — recursive partition search without caching, provably minimum
+    "exact1"     — bottom-up bitmask DP with cached subset results (O(3^n) time),
+                   provably minimum for any n
+    "exact2"     — cached bottom-up bitmask DP maximizing zero-sum prefixes,
+                   one-person transitions, O(n * 2^n) time, provably minimum
     "heuristic"  — greedy subset selection, fast for any size
     "greedy"     — polynomial O(n log n), not guaranteed minimal
     "auto"       — exact2 for n <= threshold; warns + falls back to greedy
@@ -80,8 +83,13 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
             - "payer": str
             - "amount": int
             - "participants": List[str]
-        method: "exact1" (O(3^n) bitmask DP, provably minimum),
-                "exact2" (O(n * 2^n) bitmask DP, provably minimum),
+        method: "exact0" (recursive partition search without caching,
+                provably minimum, super-exponential worst-case time),
+                "exact1" (O(3^n) bottom-up bitmask DP with cached subset
+                results, provably minimum),
+                "exact2" (O(n * 2^n) bottom-up bitmask DP with cached
+                zero-sum prefix counts and one-person transitions,
+                provably minimum),
                 "heuristic" (exponential subset enumeration, near-minimum,
                 may miss the optimum), or "greedy" (polynomial O(n log n)
                 largest-debtor-to-largest-creditor settlement, not
@@ -97,10 +105,10 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
             - "recipient": str
             - "amount": int
     """
-    if method not in ("auto", "exact1", "exact2", "heuristic", "greedy"):
+    if method not in ("auto", "exact0", "exact1", "exact2", "heuristic", "greedy"):
         raise ValueError(
-            f"Unknown method: {method!r}. Must be 'auto', 'exact1', 'exact2', 'heuristic', "
-            "or 'greedy'."
+            f"Unknown method: {method!r}. Must be 'auto', 'exact0', 'exact1', 'exact2', "
+            "'heuristic', or 'greedy'."
         )
 
     if not expenses:
@@ -138,7 +146,9 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
     if effective_method == "greedy":
         return _greedy_settle_balances(non_zero_balances)
 
-    if effective_method == "exact1":
+    if effective_method == "exact0":
+        zero_sum_groups = _find_max_zero_sum_subsets_exact0(people, non_zero_balances)
+    elif effective_method == "exact1":
         zero_sum_groups = _find_max_zero_sum_subsets_exact(people, non_zero_balances)
     elif effective_method == "exact2":
         zero_sum_groups = _find_max_zero_sum_subsets_exact2(people, non_zero_balances)
@@ -252,10 +262,61 @@ def _find_max_zero_sum_subsets_heuristic(people: List[str], balances: Balances) 
     return selected
 
 
-def _find_max_zero_sum_subsets_exact(people: List[str], balances: Balances) -> List[frozenset]:
-    """Exact DP: find maximum disjoint zero-sum subsets using bitmask DP.
+def _find_max_zero_sum_subsets_exact0(people: List[str], balances: Balances) -> List[frozenset]:
+    """Find a maximum zero-sum partition by recursion without caching.
 
-    O(3^n) time, O(2^n) space. Limited to n <= 18 in practice.
+    Try every zero-sum group containing the first remaining person, then
+    recursively partition the rest. Every partition has exactly one group
+    containing that person, so this explores every possible partition.
+    Subset sums and searches are recomputed each time they are needed.
+
+    Worst-case time is 2^Theta(n log n), with O(n) auxiliary space for the
+    recursion, current partition and best partition. Only suitable for small
+    inputs. The caller supplies non-zero balances whose total is zero.
+    """
+    n = len(people)
+    balance_list = [balances[p] for p in people]
+    current = []
+    best = []
+
+    def search(mask: int) -> None:
+        nonlocal best
+        if mask == 0:
+            if len(current) > len(best):
+                best = current.copy()
+            return
+
+        lowbit = mask & -mask
+        rest = mask ^ lowbit
+        submask = rest
+        while True:
+            candidate = submask | lowbit
+            total = sum(balance_list[i] for i in range(n) if candidate & (1 << i))
+            if total == 0:
+                current.append(candidate)
+                search(mask ^ candidate)
+                current.pop()
+            if submask == 0:
+                break
+            submask = (submask - 1) & rest
+
+    search((1 << n) - 1)
+    return [
+        frozenset(people[i] for i in range(n) if mask & (1 << i))
+        for mask in best
+    ]
+
+
+def _find_max_zero_sum_subsets_exact(people: List[str], balances: Balances) -> List[frozenset]:
+    """Find maximum disjoint zero-sum subsets using cached bottom-up bitmask DP.
+
+    Evaluate the Bellman recurrence once for each subset and cache its best
+    group count in dp[mask]. Larger subsets reuse these stored answers rather
+    than recursively searching the same remaining people again. Zero-sum
+    masks are also precomputed; parent pointers reconstruct the chosen groups.
+
+    O(3^n) time, O(2^n) space. Practical for small inputs (about n <= 18),
+    with no enforced size limit.
     """
     n = len(people)
     balance_list = [balances[p] for p in people]
@@ -270,12 +331,13 @@ def _find_max_zero_sum_subsets_exact(people: List[str], balances: Balances) -> L
         if total == 0:
             zero_sum_masks.add(mask)
 
-    # DP: dp[mask] = max disjoint zero-sum subsets within mask
+    # Cache: dp[mask] = max disjoint zero-sum subsets within mask
     dp = [0] * (1 << n)
     parent = [0] * (1 << n)  # track which subset was last added
 
+    # Removing people produces smaller masks, whose results are already cached.
     for mask in range(1, 1 << n):
-        # Option 1: don't include lowest bit person in any subset
+        # Option 1: reuse the result without the lowest bit person
         lowbit = mask & (-mask)
         dp[mask] = dp[mask ^ lowbit]
         parent[mask] = 0
@@ -308,21 +370,30 @@ def _find_max_zero_sum_subsets_exact(people: List[str], balances: Balances) -> L
 
 
 def _find_max_zero_sum_subsets_exact2(people: List[str], balances: Balances) -> List[frozenset]:
-    """Find a maximum zero-sum partition in O(n * 2^n) time, O(2^n) space.
+    """Find a maximum zero-sum partition using cached one-person transitions.
 
     Any zero-sum partition can be ordered group by group, giving a zero-sum
     prefix at every group boundary. Conversely, consecutive zero-sum prefixes
     delimit disjoint zero-sum groups. Thus maximizing zero-sum prefixes over
     all orderings maximizes the group count (and minimizes payments).
 
-    dp[mask] is the best prefix count for an ordering of mask. Choose its last
-    person by maximizing dp[mask without person], then count mask itself if
-    its sum is zero. A parent bit reconstructs the ordering and its groups.
+    Cache the maximum number of nonempty zero-sum prefixes over all orderings
+    of each subset in dp[mask]. Evaluate masks bottom-up, choosing the last
+    person by maximizing dp[mask without person], then adding one if the
+    subset sum is zero. Cache subset sums in sums[mask] as well. Removing a
+    person yields a smaller mask, so both lookups reuse computed results.
+
+    A k-person subset needs only k predecessor transitions, instead of the
+    2^(k-1) candidate groups checked by exact1. Total time is O(n * 2^n),
+    with O(2^n) space for sums, group counts and reconstruction pointers.
+    A parent bit reconstructs the ordering and its zero-sum groups.
+    Explicit exact2 has no size limit, but time and memory grow exponentially.
     The caller supplies non-zero balances whose total is zero.
     """
     n = len(people)
     balance_list = [balances[p] for p in people]
     size = 1 << n
+    # Cache each subset's balance sum and best zero-sum prefix count.
     sums = [0] * size
     dp = [0] * size
     parent = [0] * size
@@ -332,6 +403,7 @@ def _find_max_zero_sum_subsets_exact2(people: List[str], balances: Balances) -> 
         sums[mask] = sums[mask ^ lowbit] + balance_list[lowbit.bit_length() - 1]
         best = -1
         bits = mask
+        # Try each person as the last one added, reusing the predecessor count.
         while bits:
             bit = bits & -bits
             candidate = dp[mask ^ bit]
@@ -339,6 +411,7 @@ def _find_max_zero_sum_subsets_exact2(people: List[str], balances: Balances) -> 
                 best = candidate
                 parent[mask] = bit
             bits ^= bit
+        # Completing a zero-sum subset adds one group boundary.
         dp[mask] = best + (sums[mask] == 0)
 
     selected = []

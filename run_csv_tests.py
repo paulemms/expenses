@@ -12,7 +12,7 @@ def main():
     parser.add_argument("csv_file", help="Path to the input CSV file")
     parser.add_argument(
         "--method",
-        choices=("auto", "exact1", "exact2", "heuristic", "greedy"),
+        choices=("auto", "exact0", "exact1", "exact2", "heuristic", "greedy"),
         default="auto",
         help="Settlement method (default: auto)",
     )

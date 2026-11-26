@@ -146,6 +146,10 @@ case is wanted, stating it explicitly as $n = 0$ (no payments).
 
 \subsection{M5 --- The optimality proof is circular (tex:242)}
 
+The implementation discussed here is \texttt{exact1}: bottom-up bitmask
+dynamic programming with cached subset results. Its \texttt{dp} table
+stores each subset's optimal group count for reuse by larger subsets.
+
 \begin{quote}
   By Lemma 1, the DP finds the true maximum $c$.
 \end{quote}

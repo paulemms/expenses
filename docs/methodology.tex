@@ -30,7 +30,7 @@ This document describes the mathematical foundations and algorithmic methods use
 The core problem reduces to computing each participant's net balance (total paid minus total owed) and then finding a minimum-size multiset of transfers $(i, j, a)$ that zeroes all balances. We present three algorithms with different trade-offs between optimality, time, and space:
 
 \begin{enumerate}
-  \item An \textbf{exact} bitmask dynamic programming algorithm achieving the theoretical minimum $\min(n-c, \, n-1)$ payments in $O(3^n)$ time, where $n$ is the number of non-zero-balance people and $c$ is the maximum number of disjoint zero-sum subsets.
+  \item An \textbf{exact} bitmask dynamic programming algorithm (\texttt{exact1}) with cached subset results, achieving the theoretical minimum $\min(n-c, \, n-1)$ payments in $O(3^n)$ time, where $n$ is the number of non-zero-balance people and $c$ is the maximum number of disjoint zero-sum subsets.
   \item A \textbf{heuristic} greedy subset-packing algorithm running in $O(n \cdot 2^n)$ time that may miss the optimum on crafted inputs.
   \item A \textbf{greedy} two-heap largest-debtor-to-largest-creditor algorithm running in $O(n \log n)$ time with no size limit but no optimality guarantee.
 \end{enumerate}
@@ -129,7 +129,12 @@ A payment $(i, j, a)$ reduces $d_i$ by $a$ and $c_j$ by $a$. A settlement is fea
   \textbf{Achievability.} For each zero-sum subset of size $k$, apply the greedy algorithm within the subset: exactly $k-1$ payments. Summing gives $n-c$ (or $n-1$ if $n-c > n-1$, i.e., $c < 1$).
 \end{proof}
 
-\section{The Exact Algorithm: Bitmask Dynamic Programming}
+\section{Exact1: Cached Bitmask Dynamic Programming}
+
+\texttt{exact1} evaluates the Bellman recurrence bottom-up, caching the
+optimal group count for every subset. Unlike the uncached recursive
+\texttt{exact0} search, it computes each subset's result once and reuses
+that result whenever a larger subset needs it.
 
 \subsection{High-Level Strategy}
 
@@ -162,6 +167,11 @@ The optimal payment count equals $\min(n - c, \, n - 1)$.
   \texttt{dp}[m] = \text{the maximum number of pairwise disjoint zero-sum subsets that can be found using only people whose bits are set in } m.
 \]
 The answer is $\texttt{dp}[2^n - 1]$.
+
+\textbf{Cached evaluation.} Masks are processed in increasing numerical
+order. Removing people always produces a smaller mask, so every lookup
+in the transition below reads a result that has already been computed
+and stored. The table uses $O(2^n)$ space.
 
 \textbf{Base case.} $\texttt{dp}[0] = 0$.
 
@@ -262,7 +272,34 @@ Greedy remainder & $O(n \log n)$ & $O(n)$ \\
 \caption{Exact algorithm complexity analysis.}
 \end{table}
 
-The exponential bound explains the default threshold of $n = 18$: $3^{18} \approx 3.87 \times 10^8$ operations is feasible in seconds, while $3^{24} \approx 2.82 \times 10^{11}$ is infeasible.
+The exponential bound limits the practical size of \texttt{exact1} inputs.
+The default \texttt{auto} threshold applies to \texttt{exact2}, described below.
+
+\subsection{Exact2: Cached Zero-Sum Prefix Counts}
+
+\texttt{exact2} uses a different Bellman recurrence. Arrange people group
+by group: every return of the running balance to zero marks a completed
+zero-sum group. Conversely, consecutive zero-sum prefixes delimit disjoint
+zero-sum groups. Maximizing the number of these boundaries therefore
+maximizes the group count and minimizes payments.
+
+For a subset $M$, cache its balance sum $s(M)$ and the maximum number
+$f(M)$ of nonempty zero-sum prefixes over all orderings of its people:
+\[
+  f(\varnothing)=0,\qquad
+  f(M)=\max_{i\in M} f(M\setminus\{i\})+
+       \mathbf{1}_{\{s(M)=0\}}\quad(M\ne\varnothing).
+\]
+Choose each person as the last one added. The predecessor supplies its
+cached best prefix count; completing a zero-sum subset adds one boundary.
+Evaluate masks bottom-up, and compute each subset sum from a cached
+smaller subset sum. A $k$-person subset has only $k$ predecessor transitions,
+whereas \texttt{exact1} checks $2^{k-1}$ candidate groups. Overall time is
+$O(n2^n)$ and space is $O(2^n)$ for sums, counts and parent bits.
+The final count is $c=f(S)$; parent bits reconstruct an ordering, and
+zero-sum boundaries recover the groups for settlement. Explicit
+\texttt{exact2} has no enforced size limit, but both time and memory grow
+exponentially.
 
 \section{The Heuristic Algorithm}
 
@@ -350,13 +387,13 @@ Each iteration that fully clears both a debtor and a creditor removes one person
 \centering
 \begin{tabular}{llll}
 \toprule
-Property & Exact & Heuristic & Greedy \\
+Property & Exact1 & Heuristic & Greedy \\
 \midrule
 Optimality & $\checkmark$ provably optimal & $\times$ not guaranteed & $\times$ not guaranteed \\
 Time & $O(3^n)$ & $O(n \cdot 2^n)$ & $O(n \log n)$ \\
 Space & $O(2^n)$ & $O(n \cdot 2^n)$ & $O(n)$ \\
 Size limit & $n \leq 18$ (default) & any $n$ & any $n$ \\
-Method & Bitmask DP & Greedy subset packing & Two-heap pairwise \\
+Method & Cached bitmask DP & Greedy subset packing & Two-heap pairwise \\
 \bottomrule
 \end{tabular}
 \caption{Algorithm comparison.}
@@ -397,7 +434,8 @@ Function & Lines & Role \\
 \texttt{settle\_expenses()} & \S3 & Main entry; dispatches to exact/heuristic/greedy \\
 \texttt{\_settle()} & \S4 & Greedy largest-debtor-to-largest-creditor within a group \\
 \texttt{\_greedy\_settle\_balances()} & \S6 & Polynomial $O(n \log n)$ two-heap settlement \\
-\texttt{\_find\_max\_zero\_sum\_subsets\_exact()} & \S4 & Bitmask DP, optimal subset count \\
+\texttt{\_find\_max\_zero\_sum\_subsets\_exact()} & \S4 & Cached DP, optimal subset count \\
+\texttt{\_find\_max\_zero\_sum\_subsets\_exact2()} & \S4 & Cached prefix DP, one-person transitions \\
 \texttt{\_find\_max\_zero\_sum\_subsets\_heuristic()} & \S5 & Greedy subset enumeration, non-optimal \\
 \bottomrule
 \end{tabular}
@@ -409,13 +447,14 @@ The \texttt{threshold} parameter of \texttt{settle\_expenses()} controls when "a
 
 \[
   \text{effective method} = \begin{cases}
-    \texttt{exact} & \text{if } \texttt{method} = \texttt{"exact"} \\
-    \texttt{greedy} & \text{if } \texttt{method} = \texttt{"greedy"} \\
+    \texttt{method} & \text{if } \texttt{method} \ne \texttt{"auto"} \\
     \texttt{greedy} & \text{if } \texttt{method} = \texttt{"auto"} \text{ and } n > \texttt{threshold} \\
-    \texttt{exact} & \text{if } \texttt{method} = \texttt{"auto"} \text{ and } n \leq \texttt{threshold}
+    \texttt{exact2} & \text{if } \texttt{method} = \texttt{"auto"} \text{ and } n \leq \texttt{threshold}
   \end{cases}
 \]
 
-With default \texttt{threshold} $= 18$, the exact DP is used up to 18 people, and a \texttt{UserWarning} is emitted when falling back.
+With default \texttt{threshold} $= 18$, \texttt{auto} uses \texttt{exact2}'s
+cached zero-sum prefix DP up to 18 non-zero balances, and emits a
+\texttt{UserWarning} when falling back to \texttt{greedy} above that threshold.
 
 \end{document}

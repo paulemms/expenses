@@ -1,4 +1,4 @@
-"""Optimality and reconstruction checks for the O(n * 2^n) solver."""
+"""Checks for exact2: cached zero-sum prefix DP with one-person transitions."""
 
 import itertools
 import random
@@ -46,7 +46,8 @@ class TestExact2(unittest.TestCase):
 
     def test_exhaustive_small_partitions(self):
         # Compare all small non-zero, zero-total balance vectors with the
-        # independent O(3^n) solver, including repeated values and many ties.
+        # independent cached O(3^n) exact1 solver, including repeated values
+        # and many ties.
         for n in range(2, 7):
             people = [str(i) for i in range(n)]
             for values in itertools.product((-2, -1, 1, 2), repeat=n):

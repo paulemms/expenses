@@ -41,9 +41,10 @@ The methods implemented are shown below.
 
 | Method | Description | Time | Space | Guaranteed minimal? |
 |--------|-------------|------|-------|---------------------|
-| `exact1` | Bitmask dynamic programming, practical up to about 18 non-zero balances. | O(3^n) | O(2^n) | Yes |
-| `exact2` | Bitmask dynamic programming with no enforced size limit. Time and memory still grow exponentially. | O(n · 2^n) | O(2^n) | Yes |
-| `heuristic` | Exponential subset enumeration. | O(2^n · n) | O(n · 2^n) | No |
+| `exact0` | Recursive zero-sum partition search without caching. Suitable only for small inputs. | 2^Θ(n log n) | O(n) | Yes |
+| `exact1` | Bottom-up bitmask dynamic programming with cached results for each subset, practical up to about 18 non-zero balances. | O(3^n) | O(2^n) | Yes |
+| `exact2` | Bottom-up bitmask dynamic programming with cached results, adding one person at a time to maximize zero-sum group boundaries. No enforced size limit; time and memory still grow exponentially. | O(n*2^n) | O(2^n) | Yes |
+| `heuristic` | Exponential subset enumeration. | O(n*2^n) | O(n*2^n) | No |
 | `greedy` | Greedy matching of the largest debtor to the largest creditor across all balances. | O(n log n) | O(n) | No |
 | `auto` | Uses `exact2` for 18 or fewer non-zero balances, then warns and falls back to `greedy` for larger inputs. | Varies | Varies | For eligible inputs |
 
@@ -56,6 +57,8 @@ Function `net_balances(expenses)` sums paid minus owed per person. Uneven splits
 ```
 
 With `n` non-zero balances and `c` disjoint zero-sum subsets found, the minimum payment count is `n − c`. Each zero-sum subset of size `k` reduces the count by 1 (it can be settled with `k − 1` payments).
+
+`exact2` finds the maximum group count by considering orderings of the people. Each return of the running balance to zero marks a group boundary. It caches the best boundary count for each subset, trying each person as the last person added. This uses at most `n` transitions per subset, giving O(n*2^n) time, while `exact1` considers whole candidate groups and takes O(3^n) time.
 
 ## Requirements
 

@@ -101,6 +101,11 @@ considers deleting one person rather than enumerating submasks. This is
 a material omission from the comparison and the discussion of practical
 thresholds.
 
+This formulation is \texttt{exact2}: bottom-up bitmask dynamic programming
+with cached zero-sum prefix counts and subset sums. Each subset tries its
+possible last person, so a $k$-person state has $k$ transitions, compared
+with $2^{k-1}$ candidate groups in \texttt{exact1}.
+
 Let $s(M)=\sum_{i\in M}b_i$, and let $f(M)$ be the maximum number of
 nonempty zero-sum prefixes among all orderings of the people in $M$.
 Then
@@ -112,6 +117,8 @@ Then
 The recurrence follows by choosing the last person in the ordering:
 earlier prefixes belong to the ordering of the predecessor mask, and
 the full prefix contributes precisely when its sum is zero.
+The values are cached in increasing mask order, so each predecessor result
+is computed once and reused whenever a larger subset needs it.
 
 On the full zero-sum set $S$, consecutive zero-sum prefixes delimit
 disjoint zero-sum blocks covering $S$. Conversely, concatenate the
@@ -146,6 +153,11 @@ may still be described accurately as the current implementation, but
 should not be presented as the only exact alternative.
 
 \section{Exact dynamic programming and reconstruction}
+
+The $O(3^n)$ method, \texttt{exact1}, uses bottom-up bitmask dynamic
+programming with cached subset results. Each \texttt{dp[mask]} is computed
+once and reused by larger masks; this differs from the uncached recursive
+\texttt{exact0} partition search.
 
 \subsection{The recurrence is sound, but its proof needs to be stated}
 

@@ -52,7 +52,8 @@ class TestHeuristicVsExact(unittest.TestCase):
 class TestLargeNHeuristicRouting(unittest.TestCase):
     """Behaviour of the settle_expenses method dispatch for large inputs.
 
-    Auto uses the O(n * 2^n) exact2 DP up to its threshold (18 by default).
+    Auto uses exact2's cached zero-sum prefix DP with one-person transitions
+    (O(n * 2^n) time) up to its threshold (18 by default).
     Above that threshold it warns and falls back to polynomial greedy
     settlement, which is not guaranteed to minimize the payment count.
     """
