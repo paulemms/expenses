@@ -43,7 +43,7 @@ The methods implemented are shown below.
 |--------|-------------|------|-------|---------------------|
 | `exact0` | Recursive zero-sum partition search without caching. Suitable only for small inputs. | 2^Θ(n log n) | O(n) | Yes |
 | `exact1` | Bottom-up bitmask dynamic programming with cached results for each subset, practical up to about 18 non-zero balances. | O(3^n) | O(2^n) | Yes |
-| `exact2` | Bottom-up bitmask dynamic programming with cached results, adding one person at a time to maximize zero-sum group boundaries. No enforced size limit; time and memory still grow exponentially. | O(n*2^n) | O(2^n) | Yes |
+| `exact2` | Bottom-up bitmask dynamic programming with cached results, adding one person at a time to maximize zero-sum group boundaries. No enforced size limit. | O(n*2^n) | O(2^n) | Yes |
 | `heuristic` | Exponential subset enumeration. | O(n*2^n) | O(n*2^n) | No |
 | `greedy` | Greedy matching of the largest debtor to the largest creditor across all balances. | O(n log n) | O(n) | No |
 | `auto` | Uses `exact2` for 18 or fewer non-zero balances, then warns and falls back to `greedy` for larger inputs. | Varies | Varies | For eligible inputs |
@@ -70,3 +70,12 @@ With `n` non-zero balances and `c` disjoint zero-sum subsets found, the minimum 
 ```bash
 python -m unittest discover -v
 ```
+
+## References
+
+- Yoshua Bengio, Andrea Lodi, and Antoine Prouvost, [Machine Learning for Combinatorial Optimization: a Methodological Tour d’Horizon](https://arxiv.org/abs/1811.06128v2), arXiv:1811.06128v2 (2020).
+- K. T. Chung, C. K. M. Lee, and Y. P. Tsang, [Neural combinatorial optimization with reinforcement learning in industrial engineering: a survey](https://doi.org/10.1007/s10462-024-11045-1), *Artificial Intelligence Review*, 58, 130 (2025).
+- Hanjun Dai, Elias B. Khalil, Yuyu Zhang, Bistra Dilkina, and Le Song, [Learning Combinatorial Optimization Algorithms over Graphs](https://arxiv.org/abs/1704.01665v4), NIPS 2017 (arXiv revision 2018).
+- Guillaume Fertin, Oscar Fontaine, Géraldine Jean, and Stéphane Vialette, [The Maximum Zero-Sum Partition problem](https://doi.org/10.1016/j.tcs.2024.114811), *Theoretical Computer Science*, 1019, 114811 (2024).
+- Csaba Pătcaș and Attila Bartha, [Evolutionary solving of the debts’ clearing problem](https://acta.sapientia.ro/content/docs/evolutionary-solving-of-the-debts-cleari.pdf) (2019).
+- Yuanfan Yao, [Settling Debts Efficiently: Zero-Sum Set Packing](https://nrs.harvard.edu/urn-3:HUL.InstRepos:38811480), senior thesis, Harvard University (2017).
