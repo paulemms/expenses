@@ -12,7 +12,8 @@ Suppose an input file `inputs.csv` contains
 case_id,payer,amount,participants
 1,Alice,1000,Alice;Bob;Charlie
 2,Bob,500,Bob;Dave
-3,Alice,300,Alice;Eve
+2,Dave,200,Bob;Dave
+3,Alice,300,Eve;Bob;Charlie
 ```
 
 The program `run_csv_tests.py` calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone.
@@ -30,9 +31,11 @@ Case 1:
   Bob -> Alice: 333
   Charlie -> Alice: 333
 Case 2:
-  Dave -> Bob: 250
+  Dave -> Bob: 150
 Case 3:
-  Eve -> Alice: 150
+  Eve -> Alice: 100
+  Bob -> Alice: 100
+  Charlie -> Alice: 100
 
 All cases settled successfully.
 ```
