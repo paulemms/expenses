@@ -16,9 +16,9 @@ case_id,payer,amount,participants
 
 All amounts are dimensionless integers.
 
-The script `run_csv_tests.py` calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone.
+The script `run_csv_tests.py` calculates each person's net balance (total paid minus total owed) for each independent case. It then produces a list of payments that settles everyone in each case.
 
-The default `--method="auto"` uses method `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold.
+The default `--method="auto"` uses method `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold. The `"greedy"` method does not necessarily return the fewest payments.
 
 ```bash
 python run_csv_tests.py inputs.csv --method=auto
