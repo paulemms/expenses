@@ -1,8 +1,8 @@
 # The Expenses Settlement Problem
 
-This repository contains a number of algorithms that calculate the minimum number of payments required to settle a collection of shared debts. In general, this is a combinatorial optimisation problem that is NP-hard.
+This repository contains algorithms for calculating the minimum number of payments required to settle a collection of shared expenses. In general, this is a combinatorial optimisation problem that is NP-hard.
 
-## What it does
+## Overview
 
 Suppose an input file `inputs.csv` contains
 
@@ -40,7 +40,7 @@ Case 3:
 All cases settled successfully.
 ```
 
-The methods implemented are shown below.
+The methods avaiable are shown below.
 
 | Method | Description | Time | Space | Guaranteed minimal? |
 |--------|-------------|------|-------|---------------------|
@@ -51,7 +51,7 @@ The methods implemented are shown below.
 | `greedy` | Greedy matching of the largest debtor to the largest creditor across all balances. | O(n log n) | O(n) | No |
 | `auto` | Uses `exact2` for 18 or fewer non-zero balances, then warns and falls back to `greedy` for larger inputs. | Varies | Varies | For eligible inputs |
 
-## How it works
+## Implementation
 
 The script `run_csv_tests.py` uses the module `settle_expenses`.
 
