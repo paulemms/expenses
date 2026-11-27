@@ -2,23 +2,18 @@
 Unit tests for settle_expenses.py
 """
 
-import random
 import unittest
 from settle_expenses import (
     settle_expenses,
     validate_expense,
     parse_csv,
     net_balances,
-    _settle,
 )
 import tempfile
 import os
 
-# Sentinel for scenarios that assert via scenario_name rather than a fixed list.
-_NO_EXPECTED = object()
 
-
-class TestSettleExpenses(unittest.TestCase):
+class TestAutoSettlement(unittest.TestCase):
     """Tests for the settle_expenses function (default 'auto' method)."""
 
     def test_empty_input(self):
@@ -170,119 +165,6 @@ class TestSettleExpenses(unittest.TestCase):
             self.assertEqual(len(result_2), 1)
         finally:
             os.unlink(tmp_path)
-
-
-class TestSettleExpensesMethods(unittest.TestCase):
-    """Parameterized tests for settle_expenses with 'exact1' and 'heuristic' methods."""
-
-    # Shared test scenarios, parameterized across both methods
-    _test_scenarios = [
-        ("empty_input", [], []),
-        ("zero_value_expense",
-         [{"payer": "Alice", "amount": 0, "participants": ["Alice", "Bob"]}], []),
-        ("two_people_even_split",
-         [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]}],
-         [{"sender": "Bob", "recipient": "Alice", "amount": 50}]),
-        ("three_people_even_split",
-         [{"payer": "Alice", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]}],
-         [{"sender": "Bob", "recipient": "Alice", "amount": 100},
-          {"sender": "Charlie", "recipient": "Alice", "amount": 100}]),
-        ("uneven_split",
-         [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob", "Charlie"]}],
-         _NO_EXPECTED),  # Only check total_paid
-        ("repeated_expenses_same_people",
-         [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
-          {"payer": "Bob", "amount": 100, "participants": ["Alice", "Bob"]}], []),
-        ("no_self_payments",
-         [{"payer": "Alice", "amount": 200, "participants": ["Alice", "Bob"]},
-          {"payer": "Bob", "amount": 100, "participants": ["Alice", "Bob"]}],
-         _NO_EXPECTED),
-        ("no_zero_payments",
-         [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
-          {"payer": "Bob", "amount": 100, "participants": ["Alice", "Bob"]}],
-         _NO_EXPECTED),
-        ("minimum_payments_for_cycle",
-         [{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
-          {"payer": "Bob", "amount": 100, "participants": ["Bob", "Charlie"]},
-          {"payer": "Charlie", "amount": 100, "participants": ["Charlie", "Alice"]}], []),
-        ("large_amount",
-         [{"payer": "Alice", "amount": 1000000, "participants": ["Alice", "Bob"]}],
-         [{"sender": "Bob", "recipient": "Alice", "amount": 500000}]),
-        ("unicode_names",
-         [{"payer": "Alice MÃ¼ller", "amount": 200,
-           "participants": ["Alice MÃ¼ller", "BÃ¶b", "Ãarlie"]}],
-         _NO_EXPECTED),
-    ]
-
-    def _run_scenario(self, scenario_name, expenses, expected):
-        """Run a scenario for both methods, asserting identical outcomes."""
-        for method in ("exact1", "heuristic"):
-            with self.subTest(method=method, scenario=scenario_name):
-                result = settle_expenses(expenses, method=method)
-
-                if expected is _NO_EXPECTED:
-                    # Scenario-specific assertions
-                    if scenario_name == "uneven_split":
-                        self.assertTrue(all(p["amount"] > 0 for p in result))
-                        self.assertEqual(sum(p["amount"] for p in result), 66)
-                    elif scenario_name == "no_self_payments":
-                        self.assertTrue(all(p["sender"] != p["recipient"] for p in result))
-                    elif scenario_name == "no_zero_payments":
-                        self.assertTrue(all(p["amount"] > 0 for p in result))
-                    elif scenario_name == "unicode_names":
-                        self.assertTrue(all(isinstance(p["sender"], str) and isinstance(p["recipient"], str) for p in result))
-                else:
-                    # Build a canonical dict to ignore payment order
-                    result_dict = {(p["sender"], p["recipient"]): p["amount"] for p in result}
-                    expected_dict = {(e["sender"], e["recipient"]): e["amount"] for e in expected}
-                    self.assertEqual(result_dict, expected_dict)
-
-    def test_scenarios_exact1(self):
-        """Run all scenarios with 'exact1' method."""
-        for name, expenses, expected in self._test_scenarios:
-            self._run_scenario(name, expenses, expected)
-
-    def test_scenarios_heuristic(self):
-        """Run all scenarios with 'heuristic' method."""
-        for name, expenses, expected in self._test_scenarios:
-            self._run_scenario(name, expenses, expected)
-
-    def test_balances_settle_exact1(self):
-        """Verify final balances are zero for both methods."""
-        expenses = [
-            {"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob", "Charlie"]},
-            {"payer": "Bob", "amount": 150, "participants": ["Alice", "Bob", "Charlie"]},
-            {"payer": "Charlie", "amount": 200, "participants": ["Alice", "Bob", "Charlie"]},
-        ]
-        for method in ("exact1", "heuristic"):
-            with self.subTest(method=method):
-                result = settle_expenses(expenses, method=method)
-                balances = net_balances(expenses)
-                for p in result:
-                    balances[p["sender"]] += p["amount"]
-                    balances[p["recipient"]] -= p["amount"]
-                self.assertTrue(all(b == 0 for b in balances.values()))
-
-    def test_payer_not_in_participants(self):
-        """Payer who is not a participant."""
-        expenses = [{"payer": "Dave", "amount": 100, "participants": ["Alice", "Bob"]}]
-        for method in ("exact1", "heuristic"):
-            with self.subTest(method=method):
-                result = settle_expenses(expenses, method=method)
-                self.assertTrue(len(result) >= 1)
-                total_received = sum(p["amount"] for p in result if p["recipient"] == "Dave")
-                self.assertEqual(total_received, 100)
-
-    def test_multiple_cases_independent(self):
-        """Different participant groups within one case."""
-        expenses = [
-            {"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]},
-            {"payer": "Charlie", "amount": 100, "participants": ["Charlie", "Dave"]},
-        ]
-        for method in ("exact1", "heuristic"):
-            with self.subTest(method=method):
-                result = settle_expenses(expenses, method=method)
-                self.assertTrue(len(result) >= 2)
 
 
 class TestValidateExpense(unittest.TestCase):
@@ -526,125 +408,6 @@ class TestNetBalances(unittest.TestCase):
         """Empty expense list returns empty dict."""
         balances = net_balances([])
         self.assertEqual(balances, {})
-
-
-class TestGreedyMethod(unittest.TestCase):
-    """Tests for the polynomial O(n log n) greedy settlement method.
-
-    Greedy settles every balance at once with the largest-debtor-to-largest-
-    creditor pass, so it is fast and size-unbounded but not guaranteed minimal.
-    These tests pin that it stays valid, respects the n - 1 bound, matches exact
-    where the optimum is obvious, and stays numerically identical to the
-    reference _settle() reference matching.
-    """
-
-    def _assert_valid(self, result, expenses, non_zero_count):
-        """A settlement settles to zero, has no self-payments/zero amounts,
-        and uses at most non_zero_count - 1 payments."""
-        balances = net_balances(expenses)
-        for p in result:
-            self.assertNotEqual(
-                p["sender"], p["recipient"], f"self-payment detected: {p}"
-            )
-            self.assertGreater(p["amount"], 0, f"non-positive payment: {p}")
-            balances[p["sender"]] += p["amount"]
-            balances[p["recipient"]] -= p["amount"]
-        self.assertTrue(
-            all(v == 0 for v in balances.values()),
-            f"unsettled balances: {[v for v in balances.values() if v != 0]}",
-        )
-        if non_zero_count:
-            self.assertLessEqual(len(result), non_zero_count - 1)
-
-    def test_greedy_matches_exact1_on_trivial_scenarios(self):
-        """Where the optimum is obvious, greedy equals exact1 exactly."""
-        pinned = [
-            ([{"payer": "Alice", "amount": 100, "participants": ["Alice", "Bob"]}],
-             [{"sender": "Bob", "recipient": "Alice", "amount": 50}]),
-            ([{"payer": "Alice", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]}],
-             [{"sender": "Bob", "recipient": "Alice", "amount": 100},
-              {"sender": "Charlie", "recipient": "Alice", "amount": 100}]),
-            ([{"payer": "Alice", "amount": 1000000, "participants": ["Alice", "Bob"]}],
-             [{"sender": "Bob", "recipient": "Alice", "amount": 500000}]),
-        ]
-        for expenses, expected in pinned:
-            with self.subTest(scenario=expenses):
-                result = settle_expenses(expenses, "greedy")
-                result_dict = {(p["sender"], p["recipient"]): p["amount"] for p in result}
-                expected_dict = {(e["sender"], e["recipient"]): e["amount"] for e in expected}
-                self.assertEqual(result_dict, expected_dict)
-
-    def test_greedy_is_optimal_on_known_optimum(self):
-        """On the known-optimum fixture, greedy matches exact1 (6), not heuristic (7).
-
-        The fixture has a known optimum of 6 payments; the heuristic misses it
-        with 7. Greedy reaches the optimum here, which also confirms the heap
-        implementation settles to zero on this multi-group input.
-        """
-        expenses = [
-            {"payer": "A", "amount": 8, "participants": ["A", "C"]},
-            {"payer": "E", "amount": 10, "participants": ["E", "C"]},
-            {"payer": "B", "amount": 2, "participants": ["B", "F"]},
-            {"payer": "G", "amount": 4, "participants": ["G", "H"]},
-            {"payer": "I", "amount": 24, "participants": ["I", "D"]},
-            {"payer": "I", "amount": 10, "participants": ["I", "F"]},
-            {"payer": "I", "amount": 8, "participants": ["I", "H"]},
-        ]
-        result = settle_expenses(expenses, "greedy")
-        self._assert_valid(result, expenses, non_zero_count=9)
-        self.assertEqual(len(result), 6)
-        self.assertEqual(len(settle_expenses(expenses, "exact1")), 6)
-
-    def test_greedy_count_matches_reference_matching(self):
-        """Greedy's payment count equals the O(n^2) _settle() reference."""
-        expenses = [
-            {"payer": "Alice", "amount": 500, "participants": ["Alice", "Bob", "Charlie", "Dave"]},
-            {"payer": "Bob", "amount": 300, "participants": ["Alice", "Bob", "Charlie"]},
-            {"payer": "Charlie", "amount": 200, "participants": ["Alice", "Charlie"]},
-        ]
-        balances = net_balances(expenses)
-        non_zero = {p: b for p, b in balances.items() if b != 0}
-        result = settle_expenses(expenses, "greedy")
-        reference = _settle(list(non_zero), non_zero)
-        self.assertEqual(len(result), len(reference))
-        self.assertEqual(len(result), 3)  # matches the exact optimum here
-        self._assert_valid(result, expenses, len(non_zero))
-
-    def test_greedy_has_no_size_limit_and_stays_valid(self):
-        """Greedy settles a large input (n=2000 pairs) within the n - 1 bound."""
-        random.seed(1)
-        expenses = [
-            {"payer": f"P{2 * k}", "amount": random.randint(1, 1000),
-             "participants": [f"P{2 * k}", f"P{2 * k + 1}"]}
-            for k in range(2000)
-        ]
-        balances = net_balances(expenses)
-        non_zero = {p: b for p, b in balances.items() if b != 0}
-        result = settle_expenses(expenses, "greedy")
-        self._assert_valid(result, expenses, len(non_zero))
-        # n here is 4000, well past the exact DP's 18-person cap; the heap
-        # implementation still settles to zero in O(n log n) without the limit.
-        self.assertLess(len(result), len(non_zero))
-
-    def test_greedy_no_self_payments_and_no_zero_amounts(self):
-        """Structural invariants hold for the greedy method."""
-        expenses = [
-            {"payer": "Alice", "amount": 200, "participants": ["Alice", "Bob"]},
-            {"payer": "Bob", "amount": 100, "participants": ["Alice", "Bob"]},
-        ]
-        result = settle_expenses(expenses, "greedy")
-        self.assertTrue(all(p["sender"] != p["recipient"] for p in result))
-        self.assertTrue(all(p["amount"] > 0 for p in result))
-
-    def test_greedy_invalid_method_raises(self):
-        """An unknown method name still raises ValueError."""
-        expenses = [{"payer": "A", "amount": 10, "participants": ["A", "B"]}]
-        with self.assertRaises(ValueError):
-            settle_expenses(expenses, "bogus")
-
-    def test_greedy_empty_input(self):
-        """Empty input returns an empty list for the greedy method."""
-        self.assertEqual(settle_expenses([], "greedy"), [])
 
 
 if __name__ == "__main__":

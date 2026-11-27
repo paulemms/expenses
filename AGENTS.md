@@ -16,9 +16,14 @@ This project implements a **minimum-payment expense settlement algorithm**. Give
 expenses/
 ├── settle_expenses.py       # Core algorithm (net_balances, settle_expenses, validate_expense, parse_csv)
 ├── run_csv_tests.py         # CLI runner — reads CSV, prints settlements, verifies zero-sum
-├── edge_case_inputs.csv     # Sample/test dataset with 20 cases
-├── test_settle_expenses.py  # Comprehensive unit tests (TestSettleExpenses, TestSettleExpensesMethods, TestValidateExpense, TestParseCsv, TestMinimumPayments, TestNetBalances)
-├── test_heuristic_vs_exact.py  # Tests proving heuristic suboptimality on crafted cases
+├── tests/
+│   ├── data/edge_case_inputs.csv  # Sample/test dataset with 20 cases
+│   ├── test_exact0.py       # Uncached recursive solver checks
+│   ├── test_exact1.py       # Cached exact1 scenarios and settlement checks
+│   ├── test_exact2.py       # Cached prefix-DP optimality and reconstruction checks
+│   ├── test_settle_expenses.py  # Default settlement, parsing and balance checks
+│   ├── test_nonexact.py      # Heuristic and greedy validity, exact2 comparisons and dispatch
+│   └── settlement_method_checks.py  # Shared method scenario checks
 ├── spec.md                  # Original specification (assessment prompt)
 ├── README.md                # Project summary
 └── .gitignore               # Excludes .spyder/, .spyproject/, __pycache__
@@ -40,14 +45,14 @@ python -m unittest discover -v
 
 ### Run specific test classes
 ```bash
-python -m unittest test_settle_expenses.TestNetBalances -v
-python -m unittest test_settle_expenses.TestMinimumPayments -v
-python -m unittest test_heuristic_vs_exact.TestHeuristicVsExact -v
+python -m unittest tests.test_settle_expenses.TestNetBalances -v
+python -m unittest tests.test_exact1 -v
+python -m unittest tests.test_nonexact.TestHeuristicVsExact -v
 ```
 
 ### Run edge case inputs
 ```bash
-python run_csv_tests.py edge_case_inputs.csv
+python run_csv_tests.py tests/data/edge_case_inputs.csv
 ```
 
 ---
@@ -168,16 +173,21 @@ case_id,payer,amount,participants
 ## Test Coverage
 
 ### `test_settle_expenses.py`
-- **TestSettleExpenses**: Core settlement behavior (15 tests)
-- **TestSettleExpensesMethods**: Same scenarios run under both `exact1` (cached DP) and `heuristic` (5 tests)
+- **TestAutoSettlement**: Default auto settlement behavior (15 tests)
 - **TestValidateExpense**: Validation edge cases (9 tests)
 - **TestParseCsv**: CSV parsing and error handling (7 tests)
 - **TestMinimumPayments**: Optimal payment count verification (3 tests)
 - **TestNetBalances**: Net balance computation correctness (7 tests)
-- **TestGreedyMethod**: O(n log n) greedy method (validity, n-1 bound, matches `exact1` on trivial cases, no size limit, count matches `_settle` reference)
 
-### `test_heuristic_vs_exact.py`
-- Proof that heuristic is suboptimal on crafted input (7 payments vs 6)
+### `test_exact1.py`
+- **TestExact1**: Shared settlement scenarios and the known-optimum validity check run explicitly with `exact1` (5 tests)
+- Uses **SettlementMethodTestsMixin** from `settlement_method_checks.py` to share scenarios and assertions with the heuristic and greedy tests without duplicating fixtures
+
+### `test_nonexact.py`
+- **TestHeuristicMethods**: Shared settlement scenarios run with both `heuristic` and `greedy` (4 tests)
+- **TestHeuristicVsExact**: Compares `heuristic` with `exact2` on a crafted input (7 payments vs 6)
+- **TestGreedyMethod**: Validity, n-1 bound, known optimal cases compared with `exact2`, a suboptimal case (5 payments vs 4), large inputs, and `_settle` reference checks (8 tests)
+- **TestLargeNHeuristicRouting**: Large-input heuristic and auto dispatch checks
 
 ---
 
@@ -233,15 +243,16 @@ When the payer is also a participant, they receive +amount (credited) and -share
 |------|----------------|
 | `settle_expenses.py` | All logic lives here — algorithm, parsing, validation |
 | `test_settle_expenses.py` | Most comprehensive test file — covers all public APIs |
+| `tests/test_exact1.py` | Dedicated cached exact1 settlement checks |
 | `edge_case_inputs.csv` | 20 edge cases: Unicode, uneven splits, zero-value, single participant, large amounts |
 | `spec.md` | Original assessment specification — reference for requirements |
-| `test_heuristic_vs_exact.py` | Documents the heuristic vs exact divergence case |
+| `test_nonexact.py` | Tests both heuristic methods and compares them with exact2 |
 
 ---
 
 ## Verification Strategy
 
 Before committing changes:
-1. Run `python -m unittest discover -v` — all 57 tests must pass.
-2. Run `python run_csv_tests.py edge_case_inputs.csv` — all cases must settle to zero.
+1. Run `python -m unittest discover -v` — all tests must pass.
+2. Run `python run_csv_tests.py tests/data/edge_case_inputs.csv` — all cases must settle to zero.
 3. Check that no inline balance calculations remain (use `net_balances()` helper).
