@@ -1,8 +1,6 @@
 # The Expenses Settlement Problem
 
-Python tool that reads a CSV of shared expenses and tries to calculate the minimum number of payments needed to settle all debts using a variety of algorithms.
-
-All amounts are dimensionless integers.
+This repository contains a number of algorithms that calculate the minimum number of payments required to settle a collection of shared debts. In general, this is a combinatorial optimisation problem that is NP-hard.
 
 ## What it does
 
@@ -16,12 +14,20 @@ case_id,payer,amount,participants
 3,Alice,300,Eve;Bob;Charlie
 ```
 
-The program `run_csv_tests.py` calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone.
+All amounts are dimensionless integers.
+
+The script `run_csv_tests.py` calculates each person's net balance (total paid minus total owed) and produces a list of payments that settles everyone.
 
 The default `--method="auto"` uses method `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold.
 
 ```bash
 python run_csv_tests.py inputs.csv
+```
+
+To select a method explicitly, for example `exact1`:
+
+```bash
+python run_csv_tests.py inputs.csv --method exact1
 ```
 
 Expected output (payment order may vary):
@@ -59,7 +65,7 @@ Function `net_balances(expenses)` sums paid minus owed per person. Uneven splits
 11 among ["A", "B"] → A gets 6, B gets 5
 ```
 
-With `n` non-zero balances and `c` disjoint zero-sum subsets found, the minimum payment count is `n − c`. Each zero-sum subset of size `k` reduces the count by 1 (it can be settled with `k − 1` payments).
+With `n` non-zero balances, the minimum payment count is `n − c`, where `c` is the maximum number of groups in a zero-sum partition. A zero-sum group of size `k` can be settled with at most `k − 1` payments.
 
 `exact2` finds the maximum group count by considering orderings of the people. Each return of the running balance to zero marks a group boundary. It caches the best boundary count for each subset, trying each person as the last person added. This uses at most `n` transitions per subset, giving O(n*2^n) time, while `exact1` considers whole candidate groups and takes O(3^n) time.
 
