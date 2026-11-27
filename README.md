@@ -21,13 +21,7 @@ The script `run_csv_tests.py` calculates each person's net balance (total paid m
 The default `--method="auto"` uses method `"exact2"` to find the fewest payments possible for up to 18 people with non-zero balances, then warns and falls back to `"greedy"` above that threshold.
 
 ```bash
-python run_csv_tests.py inputs.csv
-```
-
-To select a method explicitly, for example `exact1`:
-
-```bash
-python run_csv_tests.py inputs.csv --method exact1
+python run_csv_tests.py inputs.csv --method=auto
 ```
 
 Expected output (payment order may vary):
@@ -59,6 +53,8 @@ The methods implemented are shown below.
 
 ## How it works
 
+The script `run_csv_tests.py` uses the module `settle_expenses`.
+
 Function `net_balances(expenses)` sums paid minus owed per person. Uneven splits distribute the remainder one at a time to **earlier** participants (CSV order) via `divmod(amount, n)`:
 
 ```
@@ -67,7 +63,7 @@ Function `net_balances(expenses)` sums paid minus owed per person. Uneven splits
 
 With `n` non-zero balances, the minimum payment count is `n − c`, where `c` is the maximum number of groups in a zero-sum partition. A zero-sum group of size `k` can be settled with at most `k − 1` payments.
 
-`exact2` finds the maximum group count by considering orderings of the people. Each return of the running balance to zero marks a group boundary. It caches the best boundary count for each subset, trying each person as the last person added. This uses at most `n` transitions per subset, giving O(n*2^n) time, while `exact1` considers whole candidate groups and takes O(3^n) time.
+Function `settle_expenses(expenses, method)` selects the algorithm through its `method` argument. Method `exact2` finds the maximum group count by considering orderings of the people. Each return of the running balance to zero marks a group boundary. It caches the best boundary count for each subset, trying each person as the last person added. This uses at most `n` transitions per subset, giving O(n*2^n) time, while method `exact1` considers whole candidate groups and takes O(3^n) time.
 
 ## Requirements
 
