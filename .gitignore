@@ -11,5 +11,7 @@ gui/
 *.aux
 *.log
 *.pdf
+/docs/solreview.*
+/docs/qwencoderreview.*
 .qwen/
 .vscode/settings.json

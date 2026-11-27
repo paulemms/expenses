@@ -172,7 +172,7 @@ def settle_expenses(expenses: List[Expense], method: str = "auto", threshold: in
 
 
 def _settle(people: Iterable[str], balances: Balances) -> List[Payment]:
-    """Settle debts for a group of people using greedy largest-debtor-to-largest-creditor.
+    """Settle a group by matching the smallest debt to the largest credit.
 
     Since the group sums to zero, this always succeeds.
     """

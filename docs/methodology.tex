@@ -1,460 +1,455 @@
 \documentclass[11pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage{amsmath,amssymb,amsfonts}
-\usepackage{amsthm}
-
+\usepackage{amsmath,amssymb,amsthm,booktabs,array,longtable}
+\usepackage[margin=1in]{geometry}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\setlength{\emergencystretch}{3em}
 \newtheorem{theorem}{Theorem}[section]
 \newtheorem{lemma}[theorem]{Lemma}
-
-\usepackage{booktabs}
-\usepackage{longtable}
-\usepackage{array}
-\usepackage{multirow}
-\usepackage{float}
-\usepackage{colortbl}
-\usepackage{makecell}
-\usepackage{xcolor}
-\usepackage[margin=1in]{geometry}
-
 \title{Minimum-Payment Expense Settlement}
+\author{}
 \date{November 2026}
-
 \begin{document}
-
 \maketitle
-
 \begin{abstract}
-This document describes the mathematical foundations and algorithmic methods used in the Expenses Settler project, a Python library for computing the globally minimum number of payments required to settle shared expenses from a CSV input.
-
-The core problem reduces to computing each participant's net balance (total paid minus total owed) and then finding a minimum-size multiset of transfers $(i, j, a)$ that zeroes all balances. We present three algorithms with different trade-offs between optimality, time, and space:
-
-\begin{enumerate}
-  \item An \textbf{exact} bitmask dynamic programming algorithm (\texttt{exact1}) with cached subset results, achieving the theoretical minimum $\min(n-c, \, n-1)$ payments in $O(3^n)$ time, where $n$ is the number of non-zero-balance people and $c$ is the maximum number of disjoint zero-sum subsets.
-  \item A \textbf{heuristic} greedy subset-packing algorithm running in $O(n \cdot 2^n)$ time that may miss the optimum on crafted inputs.
-  \item A \textbf{greedy} two-heap largest-debtor-to-largest-creditor algorithm running in $O(n \log n)$ time with no size limit but no optimality guarantee.
-\end{enumerate}
-
-We prove correctness for all three, establish the $n-c$ lower bound on payment count, and provide a complexity analysis that justifies the default threshold of $n=18$ for the exact method.
+Expenses Settler computes integer net balances from shared expenses and
+tries to minimize the number of payments that settle them. For $n$
+non-zero balances, the optimum is $n-c$, where $c$ is the maximum number
+of blocks in a zero-sum partition. Three exact methods compute this
+partition: uncached recursion (\texttt{exact0}), cached subset dynamic
+programming in $O(3^n)$ time (\texttt{exact1}), and cached prefix dynamic
+programming in $O(n2^n)$ time (\texttt{exact2}). An exponential subset
+heuristic and an $O(n\log n)$ heap method produce feasible settlements
+without guaranteeing the minimum. We prove these guarantees and describe
+the implementation, reconstruction, complexity, and relevant literature.
+Operation counts are not performance benchmarks.
 \end{abstract}
 
-\section{Problem Formulation}
+\section{Input and net balances}\label{sec:balances}
+An expense is $(p,A,U)$: a payer $p$, a non-negative integer amount $A$,
+and a nonempty \emph{ordered list of distinct} participants
+$U=(u_1,\ldots,u_m)$. All amounts are dimensionless integers. The payer
+may be absent from $U$. CSV rows with the same \texttt{case\_id} form one
+instance; different cases are settled independently.
 
-\subsection{Input}
+Write $A=qm+r$, $0\leq r<m$, using \texttt{divmod}. Participant $u_j$
+owes $a_j=q+\mathbf{1}_{j\leq r}$: earlier participants receive the
+additional unit in an uneven split. Credit $A$ to the payer and debit
+$a_j$ from each participant. A resulting balance $b_i>0$ means person
+$i$ should receive; $b_i<0$ means they should pay. Since $\sum_j a_j=A$,
+every expense preserves $\sum_i b_i=0$. Computation takes $O(L)$ time and
+$O(N)$ space, where $L$ counts expenses plus participant entries and $N$
+counts distinct names.
 
-A list of expenses, each represented as a triple $(p, A, U)$ where:
-\begin{itemize}
-  \item $p$ is the payer (a string identifier),
-  \item $A$ is the total amount, a non-negative dimensionless integer,
-  \item $U$ is the multiset of participants sharing the expense.
-\end{itemize}
+\path{parse_csv} calls \path{validate_expense}, which rejects negative
+or non-integer amounts (including booleans), invalid names, duplicate
+participants, and empty participant lists. Direct callers of
+\path{net_balances} and \path{settle_expenses} must supply valid expense
+dictionaries; neither runs the full validator. \path{net_balances} does
+explicitly reject an empty participant list.
 
-\subsection{Objective}
+With one participant, the net change is zero when that person is the payer;
+otherwise it is $+A$ for the payer and $-A$ for the participant. A payer
+included in $U$ owes at most $\lceil A/m\rceil$, so their net contribution
+$A-a_j$ is non-negative, possibly zero. For example, if $A=1$, $m=2$,
+and the payer comes first, it is zero. Zero amounts and entirely zero
+net balances require no payments.
 
-Given a collection of expenses, compute the \textbf{globally minimum} set of payments -- a list of triples $(i, j, a)$ where $a > 0$ is the amount sent from person $i$ to person $j$ -- such that after all payments, every person's net balance is zero.
-
-\subsection{Notation}
-
-\begin{itemize}
-  \item $S$: the set of persons with non-zero net balance, with $|S| = n$.
-  \item A \textbf{payment} is a triple $(i, j, a)$ with $a > 0$.
-  \item A \textbf{settlement} is a multiset of payments $P$. Its size is $|P|$.
-  \item A settlement is \textbf{feasible} if for every $i \in S$, the sum of amounts received minus the sum of amounts sent equals $-b_i$ (where $b_i$ is the net balance: positive = owed, negative = owes).
-  \item A settlement is \textbf{minimal} if it is feasible and no feasible settlement uses fewer payments.
-\end{itemize}
-
-\section{Net Balance Computation}
-
-\subsection{The Divmod Rounding Rule}
-
-For an expense $(p, A, U)$ with $|U| = m$ participants, the share of each participant $u \in U$ is:
-
+\section{Settlement model and optimum}\label{sec:optimum}
+Let $S=\{i:b_i\ne0\}$ and $n=|S|$. Payments have positive integer amounts
+and distinct sender and recipient in $S$. Transfers between these people
+are unrestricted; original expense relationships impose no edge
+constraints. Zero-balance people are removed and are not intermediaries.
+Feasibility means, for each $i\in S$,
 \[
-  s_u = \begin{cases}
-    \left\lfloor \frac{A}{m} \right\rfloor + 1 & \text{if } u \text{ is among the first } (A \bmod m) \text{ in CSV order}, \\
-    \left\lfloor \frac{A}{m} \right\rfloor & \text{otherwise}.
-  \end{cases}
+ \operatorname{inflow}(i)-\operatorname{outflow}(i)=b_i.
 \]
+Applying a payment increases the sender's residual balance and decreases
+the recipient's by its amount. Repeated transfers count separately.
 
-This implements \texttt{divmod(A, m)}: the first \texttt{(A mod m)} participants each have 1 added to their share. The shares partition $A$ exactly:
-\[
-  \sum_{u \in U} s_u = m \cdot \left\lfloor \frac{A}{m} \right\rfloor + (A \bmod m) = A.
-\]
-
-\subsection{Net Balance Formula}
-
-The net balance of person $i$ after all expenses is:
-\[
-  b_i = \sum_{e: \, p_e = i} A_e \;-\; \sum_{e: \, i \in U_e} s_{e,i}
-\]
-
-\begin{theorem}[Zero-Sum Invariant]
-  $\sum_{i \in S} b_i = 0$.
-\end{theorem}
-
-\begin{proof}
-  Every expense $A_e$ appears exactly once as a positive credit (to $p_e$) and exactly $|U_e|$ times with negative sign (as shares). Since the shares partition $A_e$ exactly, the total credit minus total debit for each expense is zero. Summing over all expenses gives zero.
-\end{proof}
-
-\subsection{Complexity}
-
-$O(E \cdot m)$ where $E$ is the number of expenses and $m = \max |U_e|$.
-
-\section{The Settlement Problem as a Graph Problem}
-
-After computing $b_i$ for all $i \in S$, we form a directed graph where:
-
-\begin{itemize}
-  \item Debtors: $D = \{i \in S : b_i < 0\}$, with $d_i = -b_i$ (amount owed by $i$).
-  \item Creditors: $C = \{i \in S : b_i > 0\}$, with $c_i = b_i$ (amount owed to $i$).
-\end{itemize}
-
-A payment $(i, j, a)$ reduces $d_i$ by $a$ and $c_j$ by $a$. A settlement is feasible iff all $d_i$ and $c_j$ reach zero.
-
-\begin{theorem}[The $n-1$ Bound]
-  Any feasible settlement uses at most $n-1$ payments.
-\end{theorem}
-
-\begin{proof}
-  Sort persons by balance. Let person $p_1$ owe the most. Send $p_1$'s entire debt to any creditor. This eliminates at least one person. Repeat. At most $n-1$ payments needed.
-\end{proof}
-
-\begin{theorem}[The $n-c$ Bound]
-  Let $c$ be the maximum number of pairwise disjoint zero-sum subsets of $S$. Then any settlement uses at least $n-c$ payments, and there exists a feasible settlement using exactly $n-c$ payments.
-\end{theorem}
-
-\begin{proof}
-  \textbf{Lower bound.} Each zero-sum subset of size $k$ involves $k$ people. Eliminating all $k$ internal balances requires at least $k-1$ payments (same proof as the $n-1$ bound applied to the subset). Across $c$ disjoint subsets this accounts for $\sum (k_j - 1) = n - \sum k_j$ payments. The remaining $n - \sum k_j$ people need at most $(n - \sum k_j) - 1$ additional payments. Total $\geq n - c$.
-
-  \textbf{Achievability.} For each zero-sum subset of size $k$, apply the greedy algorithm within the subset: exactly $k-1$ payments. Summing gives $n-c$ (or $n-1$ if $n-c > n-1$, i.e., $c < 1$).
-\end{proof}
-
-\section{Exact1: Cached Bitmask Dynamic Programming}
-
-\texttt{exact1} evaluates the Bellman recurrence bottom-up, caching the
-optimal group count for every subset. Unlike the uncached recursive
-\texttt{exact0} search, it computes each subset's result once and reuses
-that result whenever a larger subset needs it.
-
-\subsection{High-Level Strategy}
-
-The exact algorithm achieves the theoretical minimum $n-c$ by:
-\begin{enumerate}
-  \item Finding the \textbf{maximum} number $c$ of pairwise disjoint zero-sum subsets of $S$.
-  \item For each subset, settling with greedy largest-debtor-to-largest-creditor (cost: $k-1$ for a subset of size $k$).
-  \item Settling the remainder greedily (cost: $\leq (n - \sum k_j) - 1$).
-\end{enumerate}
-
-The optimal payment count equals $\min(n - c, \, n - 1)$.
-
-\subsection{Step 1: Zero-Sum Mask Enumeration}
-
-\textbf{Encoding.} Assign each person $p_j$ the index $j \in \{0, \ldots, n-1\}$. A subset $T \subseteq S$ is encoded as the bitmask $m \in \{0, 1, \ldots, 2^n-1\}$ where bit $j$ is 1 iff $p_j \in T$.
-
-\textbf{Precomputation.} We precompute all zero-sum masks:
-\[
-  \texttt{zero\_sum\_masks} = \{m \mid \sum_{j: \text{bit } j \text{ of } m \text{ is set}} \!\! \texttt{balance\_list}[j] = 0\}
-\]
-
-\textbf{Complexity:} $O(n \cdot 2^n)$ time and space.
-
-\textbf{Observation.} Since $\sum_{j=0}^{n-1} b_{p_j} = 0$ (Theorem 2), the full mask $111\ldots 1$ is always zero-sum.
-
-\subsection{Step 2: Maximum Disjoint-Zero-Sum Count via DP}
-
-\textbf{State.} Define:
-\[
-  \texttt{dp}[m] = \text{the maximum number of pairwise disjoint zero-sum subsets that can be found using only people whose bits are set in } m.
-\]
-The answer is $\texttt{dp}[2^n - 1]$.
-
-\textbf{Cached evaluation.} Masks are processed in increasing numerical
-order. Removing people always produces a smaller mask, so every lookup
-in the transition below reads a result that has already been computed
-and stored. The table uses $O(2^n)$ space.
-
-\textbf{Base case.} $\texttt{dp}[0] = 0$.
-
-\textbf{Transition.} For each $m > 0$, let $\texttt{lowbit} = m \;\&\; (-m)$ (the least significant set bit). We consider two cases:
-
-\paragraph{Option A: Do not include lowbit's person in any subset.}
-\[
-  \texttt{dp}[m] = \texttt{dp}[m \oplus \texttt{lowbit}]
-\]
-This is always feasible: if the best partition of $m \oplus \texttt{lowbit}$ uses $c$ subsets, so does $m$ (we just ignore the lowbit person).
-
-\paragraph{Option B: Include lowbit's person in a zero-sum subset.}
-The subset must include lowbit (otherwise covered by Option A). Iterate over all submasks $s \subseteq (m \oplus \texttt{lowbit})$, forming $\texttt{candidate} = s \mid \texttt{lowbit}$:
-\[
-  \texttt{if candidate} \in \texttt{zero\_sum\_masks:}
-\quad \texttt{dp}[m] = \max(\texttt{dp}[m],\; \texttt{dp}[m \oplus \texttt{candidate}] + 1)
-\]
-
-\textbf{Key insight.} The person at lowbit \textbf{must} belong to some subset (if they belong to one at all). We iterate only over zero-sum subsets that \textbf{include} lowbit, avoiding redundant sub-problems and ensuring every partition is considered exactly once.
-
-\textbf{Complexity of the transition.} The number of submasks of a mask of weight $w$ is $2^{w-1}$. Summing over all $2^n$ masks gives:
-\[
-  \sum_{w=1}^{n} \binom{n}{w} \cdot 2^{w-1} = \frac{1}{2}\sum_{w=0}^{n}\binom{n}{w}2^w = \frac{3^n}{2} = O(3^n)
-\]
-
-\subsection{Step 3: Reconstruction via Parent Pointers}
-
-Maintain $\texttt{parent}[m]$ = the mask of the last zero-sum subset added in the optimal solution:
-\[
-  \texttt{parent}[m] = \begin{cases}
-    0 & \text{if Option A is chosen},\\
-    \texttt{candidate} & \text{otherwise.}
-  \end{cases}
-\]
-
-\textbf{Reconstruction algorithm:}
-\begin{verbatim}
-selected = []
-m = (1 << n) - 1
-while m > 0:
-    sub = parent[m]
-    if sub == 0: break          # no more subsets to extract
-    selected.append(people set from sub)
-    m = m ^ sub                  # remove extracted subset
-return selected
-\end{verbatim}
-
-\begin{lemma}[Correctness of reconstruction]
-The sequence of subsets produced by repeatedly extracting $\texttt{parent}[m]$ is a valid partition: extracted subsets are pairwise disjoint, all are zero-sum, and the union covers the subset of $m$ for which $\texttt{parent}$ was set.
+\begin{lemma}\label{lem:upper}
+For $n>0$, a feasible settlement exists with at most $n-1$ payments.
+For $n=0$, the optimum is zero.
 \end{lemma}
-
 \begin{proof}
-By induction on the number of extraction steps. Each iteration removes exactly $\texttt{parent}[m]$ from $m$, and $\texttt{parent}[m]$ is a zero-sum mask (verified during DP). Since $m$ decreases strictly, the process terminates. The final $m$ with $\texttt{parent} = 0$ has no subsets remaining.
+Choose a debtor of outstanding magnitude $d>0$ and a creditor with credit
+$a>0$, and transfer $\min(d,a)$. This clears at least one balance,
+preserves zero total, and never changes a balance's sign. The final
+transfer clears two balances, giving at most $n-1$ transfers. The empty
+instance needs none.
 \end{proof}
+This is an existence bound. It does not bound every feasible payment
+list: splitting a transfer into several can increase its length.
 
-\subsection{Step 4: Intra-Subset Settlement}
-
-For each discovered zero-sum subset $T$ of size $k$, apply the greedy largest-debtor-to-largest-creditor within $T$ only. Since the subset is zero-sum, this terminates with all internal balances at zero in exactly $k-1$ payments.
-
-\subsection{Step 5: Remainder Settlement}
-
-People not in any extracted subset are settled by greedy pairwise matching over the entire balance set.
-
-\subsection{Total Payment Count}
-
-\[
-  |P| = (k_1-1) + (k_2-1) + \cdots + (k_c-1) + |P_{\text{remainder}}|
-\]
-where $\sum k_j = \sum |T_j|$. If no remainder people exist: $|P| = n - c$. Otherwise $|P| \leq n - c - 1$. In all cases $|P| \leq n-1$ (Theorem 3) and $|P| \geq n-c$ (Theorem 4).
-
-\subsection{Correctness}
-
-\begin{theorem}[Optimality of the Exact Algorithm]
-The exact algorithm produces a settlement of minimum size.
+A zero-sum partition of $S$ has nonempty blocks $G$ with
+$\sum_{i\in G}b_i=0$. Let $c$ be the maximum number of blocks, with
+$c=0$ for the empty instance.
+\begin{theorem}\label{thm:optimum}
+The minimum payment count is $\operatorname{OPT}=n-c$.
 \end{theorem}
-
 \begin{proof}
-By Lemma 1, the DP finds the true maximum $c$. By Theorem 4, $n-c$ is a lower bound on any feasible settlement, and we construct one of that size. Therefore the result is optimal.
+Form the undirected payment multigraph of any feasible settlement on $S$.
+Each of its $q$ connected components sums to zero: summing balance
+equations cancels internal transfers, and no transfer crosses components.
+Thus $q\leq c$. A connected $k$-vertex component needs at least $k-1$
+edges, giving at least $n-q\geq n-c$ payments.
+Conversely, settle each block of a maximum zero-sum partition using
+Lemma~\ref{lem:upper}. This needs at most
+$\sum_G(|G|-1)=n-c$ payments, proving equality.
 \end{proof}
+\begin{lemma}\label{lem:indecomposable}
+A block of a maximum zero-sum partition has no proper nonempty zero-sum
+subset. The construction above settles such a $k$-person block in exactly
+$k-1$ payments.
+\end{lemma}
+\begin{proof}
+A proper zero-sum subset and its complement would split the block and
+increase the partition count. Therefore any feasible payment graph for
+the block is connected and needs at least $k-1$ edges; the construction
+uses at most that many.
+\end{proof}
+For arbitrary zero-sum blocks only the upper bound is guaranteed.
+For example, a four-person group with balances $(5,5,-5,-5)$ can be
+settled by two payments of 5, fewer than $k-1=3$.
+A maximum collection of disjoint nonempty zero-sum subsets covers $S$:
+a nonempty leftover would sum to zero and could be added. There is no need
+to take $\min(n-c,n-1)$, since $c\geq1$ when $n>0$.
 
-\subsection{Complexity Summary}
-
-\begin{table}[H]
-\centering
-\begin{tabular}{lll}
-\toprule
-Step & Time & Space \\
-\midrule
-Zero-sum mask enumeration & $O(n \cdot 2^n)$ & $O(2^n)$ \\
-DP computation & $O(3^n)$ & $O(2^n)$ \\
-Reconstruction & $O(n \cdot c)$ & $O(c)$ \\
-Greedy intra-subset & $O(n \cdot c)$ & $O(n)$ \\
-Greedy remainder & $O(n \log n)$ & $O(n)$ \\
-\midrule
-\textbf{Total} & $\mathbf{O(3^n)}$ & $\mathbf{O(2^n)}$ \\
-\bottomrule
-\end{tabular}
-\caption{Exact algorithm complexity analysis.}
-\end{table}
-
-The exponential bound limits the practical size of \texttt{exact1} inputs.
-The default \texttt{auto} threshold applies to \texttt{exact2}, described below.
-
-\subsection{Exact2: Cached Zero-Sum Prefix Counts}
-
-\texttt{exact2} uses a different Bellman recurrence. Arrange people group
-by group: every return of the running balance to zero marks a completed
-zero-sum group. Conversely, consecutive zero-sum prefixes delimit disjoint
-zero-sum groups. Maximizing the number of these boundaries therefore
-maximizes the group count and minimizes payments.
-
-For a subset $M$, cache its balance sum $s(M)$ and the maximum number
-$f(M)$ of nonempty zero-sum prefixes over all orderings of its people:
+\section{Generating payments inside a group}\label{sec:group}
+Exact and subset-heuristic paths call \path{_settle} for each group.
+The implementation rebuilds debtor and creditor dictionaries each
+iteration, then chooses
 \[
-  f(\varnothing)=0,\qquad
-  f(M)=\max_{i\in M} f(M\setminus\{i\})+
-       \mathbf{1}_{\{s(M)=0\}}\quad(M\ne\varnothing).
+ i=\arg\max_{b_i<0}b_i,\qquad j=\arg\max_{b_j>0}b_j.
 \]
-Choose each person as the last one added. The predecessor supplies its
-cached best prefix count; completing a zero-sum subset adds one boundary.
-Evaluate masks bottom-up, and compute each subset sum from a cached
-smaller subset sum. A $k$-person subset has only $k$ predecessor transitions,
-whereas \texttt{exact1} checks $2^{k-1}$ candidate groups. Overall time is
-$O(n2^n)$ and space is $O(2^n)$ for sums, counts and parent bits.
-The final count is $c=f(S)$; parent bits reconstruct an ordering, and
-zero-sum boundaries recover the groups for settlement. Explicit
-\texttt{exact2} has no enforced size limit, but both time and memory grow
-exponentially.
+This is the \emph{smallest outstanding debt} (closest to zero) and the
+largest credit. The heap method in Section~\ref{sec:greedy}
+does choose the largest debt. Both support Lemma~\ref{lem:upper}.
+Ties in \path{_settle} follow dictionary insertion order, inherited from
+the supplied group iterable. Since groups can be sets, this does not
+promise a fixed name order across runs.
 
-\section{The Heuristic Algorithm}
+Transfer $a=\min(-b_i,b_j)>0$, update $b_i\leftarrow b_i+a$ and
+$b_j\leftarrow b_j-a$, and remove zero balances. Zero total ensures both
+sides disappear together. Repeated scans take $O(k^2)$ time and $O(k)$
+space for a $k$-person group. Across disjoint groups, time is
+$O(\sum_G|G|^2)\subseteq O(n^2)$ and payment output uses $O(n)$ space.
+Maximum partitions produce exactly $n-c$ payments by
+Lemma~\ref{lem:indecomposable}; arbitrary partitions give an upper bound.
 
-\subsection{Strategy}
+\section{Uncached recursion: \texttt{exact0}}\label{sec:exact0}
+Represent subsets by $n$-bit masks. For a nonempty remaining mask $M$,
+fix its lowest set bit $p$. Enumerate every $T\subseteq M$ containing
+$p$; if $T$ sums to zero, recursively partition $M\setminus T$.
+At the empty mask, compare the current partition with the best found.
+Every partition has exactly one block containing $p$. Induction on
+$|M|$ proves that every zero-sum partition is explored, so maximizing
+the block count is exact. Neither subset sums nor subproblem results
+are cached; remaining masks can be searched repeatedly.
 
-Enumerate all zero-sum subsets in order of increasing size, then greedily select non-overlapping ones:
-\begin{verbatim}
-for size = 2 to n:
-    for each combination of size persons:
-        if sum of their balances is zero:
-            add to zero_sum_subsets
+Worst-case time is $2^{\Theta(n\log n)}$. The number of set partitions,
+times exponential candidate enumeration and polynomial work per search
+node, gives the upper order in the exponent. For a lower bound, $m$
+balances $+1$ and $m$ balances $-1$ give $m!$ pair partitions, all
+visited, for $n=2m$. Candidate sums scan $n$ positions. Recursion masks,
+the current partition, and the best partition use $O(n)$ auxiliary words.
+Stored output groups together contain $n$ people.
 
-sort zero_sum_subsets by size (smallest first)
-selected = []; used = empty set
-for subset in zero_sum_subsets:
-    if subset \\cap used == \\emptyset:
-        selected.append(subset)
-        used |= subset
-\end{verbatim}
+\section{Cached subset DP: \texttt{exact1}}\label{sec:exact1}
+Precompute the set $Z$ of all \emph{nonempty} zero-sum masks. Let $D[M]$
+be the maximum number of disjoint nonempty zero-sum subsets contained
+in $M$; intermediate states may leave people unused. Set
+$D[\varnothing]=0$. For nonempty $M$ with lowest bit $p$,
+\[
+ D[M]=\max\left\{D[M\setminus\{p\}],\quad
+ \max_{\substack{T\subseteq M,\ p\in T\\T\in Z}}
+       (1+D[M\setminus T])\right\}.
+\]
+Ignore the inner maximum if there is no eligible $T$.
+\begin{theorem}\label{thm:exact1}
+This recurrence computes the stated maximum, and $D[S]=c$.
+\end{theorem}
+\begin{proof}
+Induct on $|M|$. In an optimal collection, either $p$ is unused or it
+belongs to exactly one group $T$. The induction hypothesis bounds these
+cases by the respective alternatives. Conversely, each alternative
+combines valid disjoint groups and is attainable. On the full zero-sum
+set a maximum collection covers everyone, so its size is $c$.
+\end{proof}
+Increasing integer mask order ensures predecessor values are already
+cached. Reusing answers does not mean each partition is generated once.
 
-\subsection{Complexity}
+\subsection{Reconstruction}
+A zero parent denotes the skip alternative; a nonzero parent records a
+group after a strict improvement over the skip value. On a nonempty
+\emph{zero-sum} mask $M$, skipping $p$ cannot be optimal: an optimal
+collection within $M\setminus\{p\}$ leaves a nonempty zero-sum set in
+$M$ containing $p$, which can be added as another group. Hence
+$D[M]>D[M\setminus\{p\}]$ and the parent is nonzero. Removing the parent
+group leaves a zero-sum remainder. Starting at $S$, reconstruction
+therefore exhausts the mask and returns $c$ blocks.
 
-\begin{itemize}
-  \item Enumeration: $\sum_{k=2}^{n} \binom{n}{k} = 2^n - n - 1$ subsets. Each check costs $O(n)$. Total: $O(n \cdot 2^n)$.
-  \item Sorting: $O(n^2 \cdot 2^n)$.
-  \item Greedy selection: $O(n \cdot 2^n)$.
-  \item \textbf{Dominant term:} $O(n \cdot 2^n)$.
-\end{itemize}
-
-\subsection{Not Guaranteed Optimal}
-
-The heuristic may select a large subset that blocks two smaller disjoint subsets. For example, with balances chosen such that a size-3 subset consumes people needed for two disjoint size-2 subsets, the heuristic produces more total payments than the exact DP.
-
-\section{The Greedy Algorithm: $O(n \log n)$}
-
-\subsection{Strategy}
-
-Settle all balances in a single greedy pass using two min-heaps:
-
-\begin{itemize}
-  \item \textbf{Debtors heap:} keyed by $(-b_i, i)$, so the smallest key = the largest debtor.
-  \item \textbf{Creditors heap:} keyed by $(-b_i, i)$, so the smallest key = the largest creditor.
-\end{itemize}
-
-\textbf{Why negate.} Python's \texttt{heapq} is a min-heap. Negating the balance value makes the smallest heap entry correspond to the largest absolute balance.
-
-\subsection{Algorithm}
-
-\begin{verbatim}
-debtors = minheap[(-b_i, i) for i if b_i < 0]
-creditors = minheap[(-b_i, i) for i if b_i > 0]
-
-while debtors and creditors:
-    k_d, d = debtors[0]      # k_d = -b_d < 0
-    k_c, c = creditors[0]    # k_c = -b_c < 0
-    amount = min(-k_d, -k_c)
-    emit payment(d, c, amount)
-    pop both heaps
-    push back d if balance not exhausted
-    push back c if balance not exhausted
-\end{verbatim}
-
-\textbf{Termination.} Each iteration reduces the sum of remaining balances by $\texttt{amount} > 0$. The sum is finite and non-negative, so the process terminates.
-
-\textbf{Correctness.} At termination, at most one heap is non-empty. If both are non-empty, the heap-invariant (smallest = largest) implies a positive balance exists in both, so another payment can be made -- contradiction. Exactly one heap is non-empty. But since $\sum b_i = 0$ (Theorem 2), the remaining balances must all be zero.
-
-\subsection{Payment Count and Gaps}
-
-Each iteration that fully clears both a debtor and a creditor removes one person from consideration (one payment per removal). The upper bound is $n-1$ payments (at least one person removed per payment).
-
-\textbf{Not guaranteed minimal.} In multi-group scenarios, the greedy may bridge zero-sum groups that could be settled more efficiently in isolation. The gap between greedy and optimal can be arbitrarily large for sufficiently structured inputs (multiple disjoint zero-sum components connected through a single "bridge" person).
+This is a zero-sum reconstruction guarantee. For arbitrary balances such
+as $(2,1,-1)$, a non-zero-total mask can have a zero parent despite a
+positive DP value. The implementation stops there rather than following
+skips; it is not a general reconstruction routine for those inputs.
+The public caller's remaining-people branch is defensive and is not
+needed after correct exact reconstruction on valid inputs.
 
 \subsection{Complexity}
+Constructing $Z$ scans $n$ positions for each mask: $O(n2^n)$ time and
+$O(2^n)$ storage. A $k$-person mask tests $2^{k-1}$ candidate groups,
+giving exactly
+\[
+ \sum_{k=1}^n\binom nk2^{k-1}=\frac{3^n-1}{2}
+\]
+tests overall. DP takes $O(3^n)$ time and $O(2^n)$ space. Converting
+$c$ group masks to people scans $n$ positions per group, taking $O(nc)$
+time and $O(n)$ group storage. Including group settlement, total bounds
+remain $O(3^n)$ time and $O(2^n)$ space.
 
-\begin{itemize}
-  \item Heap construction: $O(n)$.
-  \item Each iteration pops one person and pushes back at most one. Total iterations $\leq 2n-1$.
-  \item Each push/pop: $O(\log n)$.
-  \item \textbf{Total:} $O(n \log n)$ time, $O(n)$ space.
-\end{itemize}
+\section{Cached prefix DP: \texttt{exact2}}\label{sec:exact2}
+Order the people and count the nonempty prefixes whose balances sum to
+zero. Ordering the blocks of a maximum partition consecutively gives
+at least $c$ such prefixes. Conversely, consecutive zero-sum prefix
+boundaries delimit zero-sum blocks; the full set is the final boundary.
+Thus the maximum prefix count is exactly $c$. A public exposition of this
+$O(n2^n)$ method is the official AtCoder editorial~\cite{atcoder2025};
+this does not establish priority or a best-known complexity bound.
 
-\section{Comparison Summary}
+Let $s[M]=\sum_{i\in M}b_i$ and $F[M]$ be the maximum number of nonempty
+zero-sum prefixes in an ordering of $M$. Set $s[\varnothing]=0$ and
+$F[\varnothing]=0$. With $p$ the lowest bit of $M$, compute
+\[
+ s[M]=s[M\setminus\{p\}]+b_p,\qquad
+ F[M]=\max_{i\in M}F[M\setminus\{i\}]+\mathbf{1}_{s[M]=0}.
+\]
+Choosing the last person $i$ leaves an optimal predecessor ordering;
+the only new prefix is the whole of $M$, contributing the indicator.
+Induction proves this recurrence for every mask, including masks with
+nonzero total. The preceding equivalence gives $F[S]=c$, and
+Theorem~\ref{thm:optimum} gives the minimum payment count.
 
-\begin{table}[H]
-\centering
-\begin{tabular}{llll}
-\toprule
-Property & Exact1 & Heuristic & Greedy \\
-\midrule
-Optimality & $\checkmark$ provably optimal & $\times$ not guaranteed & $\times$ not guaranteed \\
-Time & $O(3^n)$ & $O(n \cdot 2^n)$ & $O(n \log n)$ \\
-Space & $O(2^n)$ & $O(n \cdot 2^n)$ & $O(n)$ \\
-Size limit & $n \leq 18$ (default) & any $n$ & any $n$ \\
-Method & Cached bitmask DP & Greedy subset packing & Two-heap pairwise \\
-\bottomrule
-\end{tabular}
-\caption{Algorithm comparison.}
-\end{table}
+Store the maximizing last-person bit. Following parents removes people
+in reverse ordering. The code accumulates removed people into a group
+and emits it when the remaining mask sums to zero. Differences between
+consecutive zero-total masks are zero, so each emitted group is zero-sum.
+All people are recovered and the group count equals $F[S]$.
 
-\section{Edge Cases and Invariants}
+Subset sums need $O(2^n)$ transitions. Prefix DP uses exactly
+\[
+ \sum_{k=1}^n k\binom nk=n2^{n-1}
+\]
+one-person predecessor transitions. Sums, values, and parents use
+$O(2^n)$ space; reconstruction and group storage use $O(n)$.
+Including group settlement, time is $O(n2^n)$ and space is $O(2^n)$.
+Both are exponential despite the improvement over \texttt{exact1}.
 
-\subsection{Zero-Value Expenses}
-An expense with $A = 0$ contributes $0$ to every participant's share. No effect on balances.
+\section{Smallest-subset-first heuristic}\label{sec:heuristic}
+The heuristic enumerates combinations in increasing size, starting at
+two because active balances are nonzero. It stores all zero-sum subsets,
+sorts by cardinality, and selects each subset disjoint from earlier
+choices. The stable sort is redundant with enumeration order; equal-size
+choices follow the people order.
 
-\subsection{Single Participant}
-An expense with $|U| = 1$ credits the payer $A$ and debits the participant $A$ by $A$. Net: $b_{\text{payer}} \leftarrow b_{\text{payer}} + 0$. No effect.
+This produces a maximal, not necessarily maximum, packing. It covers
+$S$: a nonempty leftover would sum to zero and would have been an
+eligible disjoint candidate when visited. For $\hat c$ selected groups,
+the resulting payment count satisfies
+\[
+ \operatorname{OPT}\leq T\leq n-\hat c,\qquad
+ 0\leq T-\operatorname{OPT}\leq c-\hat c.
+\]
+Equality $T=n-\hat c$ is not asserted for arbitrary decomposable groups.
+As with the exact paths, the public caller's remaining-people branch is
+therefore defensive: valid input leaves no remainder after this maximal
+packing either.
 
-\subsection{Payer Not a Participant}
-The payer receives $+A$ (credited) but has no negative share. Net: $b_{\text{payer}} \leftarrow b_{\text{payer}} + A$. The payer is a creditor for that expense.
+A checkable example has balances
+\[
+ (b_A,b_B,b_C,b_D,b_E,b_F,b_G,b_H,b_I)
+       =(4,1,-9,-12,5,-6,2,-6,21).
+\]
+The groups $\{A,G,F\}$, $\{B,E,H\}$, $\{C,D,I\}$ give six payments.
+No opposite pairs exist, so three groups is optimal on nine people.
+With the order $A,C,E,B,F,G,H,I,D$ used in
+\path{tests/test_nonexact.py}, the heuristic first chooses $\{A,C,E\}$.
+The six remaining people have no zero-sum pair or triple, hence no
+proper zero-sum subset; their single block gives seven payments total.
 
-\subsection{Payer Is a Participant}
-The payer receives $+A$ and a negative share $s_p$. Net: $b_p \leftarrow b_p + A - s_p$. Since $s_p \leq A/m < A$ when $|U| \geq 2$, the payer always has a positive net from their own expense.
+Enumeration and summation cost $O(n2^n)$. For $Z$ stored subsets,
+sorting costs at most $O(Z\log Z)\subseteq O(n2^n)$; overlap checks
+cost at most $O(nZ)$. Stored members use $O(n2^n)$ space. Total time,
+including group settlement, is $O(n2^n)$. This is an exponential method,
+not a scalable substitute for exact search.
 
-\subsection{Invariants}
+\section{Largest-debt heap settlement: \texttt{greedy}}\label{sec:greedy}
+The min-heaps contain
+\[
+ H_D=\{(b_i,i):b_i<0\},\qquad H_C=\{(-b_i,i):b_i>0\}.
+\]
+Both keys are negative magnitudes, so the roots identify the largest
+debt and credit. Equal heap keys are resolved lexicographically by person
+name, unlike the insertion-order ties in Section~\ref{sec:group}.
+Pop roots with keys $k_D,k_C<0$, transfer
+$a=\min(-k_D,-k_C)>0$, and reinsert each nonzero remainder with key
+$k_D+a$ or $k_C+a$. Each iteration makes two pops and at most one push,
+since at least one balance clears.
 
-\begin{enumerate}
-  \item \textbf{All payment amounts are positive.} Every payment amount is $\min(-d_{\text{debtor}}, c_{\text{creditor}})$ with both arguments strictly positive (we only consider non-zero balances).
+Outstanding debt $\sum_{b_i<0}(-b_i)$ decreases by $a$. The signed sum
+stays zero; it does not decrease. Equal total debt and credit ensure
+termination with \emph{both} heaps empty. At most $n-1$ iterations give
+$O(n\log n)$ time and $O(n)$ space including output.
 
-  \item \textbf{No self-payment.} The debtor heap and creditor heap are disjoint sets (balance $< 0$ vs. balance $> 0$). No person can appear in both.
-\end{enumerate}
+For balances $(8,7,6,-9,-8,-4)$, the partition $\{8,-8\}$,
+$\{7,6,-9,-4\}$ gives four payments, but this rule uses five, as tested
+in \path{tests/test_nonexact.py}. Every active person must touch a payment,
+so $\operatorname{OPT}\geq\lceil n/2\rceil$. For nonempty input,
+\[
+ \frac{T}{\operatorname{OPT}}\leq
+ \frac{n-1}{\lceil n/2\rceil}<2.
+\]
+This bound does not make greedy exact or establish an unbounded additive
+gap example.
+The corresponding additive upper bound is
+$T-\operatorname{OPT}\leq(n-1)-(n-c)=c-1$.
 
-\section{Source Reference}
-
-All algorithms are implemented in \texttt{settle\_expenses.py}:
-
+\section{Comparison and dispatch}\label{sec:comparison}
 \begin{center}
-\begin{tabular}{lll}
-\toprule
-Function & Lines & Role \\
+\begin{tabular}{@{}llll@{}}
+\toprule Method & Worst-case time & Space & Minimum guaranteed \\
 \midrule
-\texttt{net\_balances()} & \S2 & Compute per-person net balance from expenses \\
-\texttt{settle\_expenses()} & \S3 & Main entry; dispatches to exact/heuristic/greedy \\
-\texttt{\_settle()} & \S4 & Greedy largest-debtor-to-largest-creditor within a group \\
-\texttt{\_greedy\_settle\_balances()} & \S6 & Polynomial $O(n \log n)$ two-heap settlement \\
-\texttt{\_find\_max\_zero\_sum\_subsets\_exact1()} & \S4 & Cached DP, optimal subset count \\
-\texttt{\_find\_max\_zero\_sum\_subsets\_exact2()} & \S4 & Cached prefix DP, one-person transitions \\
-\texttt{\_find\_max\_zero\_sum\_subsets\_heuristic()} & \S5 & Greedy subset enumeration, non-optimal \\
+\texttt{exact0} & $2^{\Theta(n\log n)}$ & $O(n)$ & Yes \\
+\texttt{exact1} & $O(3^n)$ & $O(2^n)$ & Yes \\
+\texttt{exact2} & $O(n2^n)$ & $O(2^n)$ & Yes \\
+\texttt{heuristic} & $O(n2^n)$ & $O(n2^n)$ & No \\
+\texttt{greedy} & $O(n\log n)$ & $O(n)$ & No \\
 \bottomrule
 \end{tabular}
 \end{center}
+Add the balance-computation cost from Section~\ref{sec:balances}.
+Bounds use a word-operation model: masks, indices, balances, arithmetic,
+and hashed lookups have constant cost; space counts words. Python uses
+arbitrary-precision integers, so actual costs also depend on mask and
+amount bit lengths. These are not bit-complexity bounds for unbounded
+integers.
 
-\section{Dispatch Logic}
+\texttt{auto} chooses \texttt{exact2} for $n\leq\texttt{threshold}$,
+default 18; above it, a \texttt{UserWarning} accompanies fallback to
+\texttt{greedy}. Explicit methods ignore the threshold and have no
+enforced size cap. Empty expenses or all-zero balances return no payments.
+Accepted method names are \texttt{auto}, \texttt{exact0}, \texttt{exact1},
+\texttt{exact2}, \texttt{heuristic}, and \texttt{greedy}. An unrecognized
+method raises \texttt{ValueError}, even for empty expenses, because the
+method check precedes the empty-input return. Explicit \texttt{heuristic}
+does not trigger the automatic fallback warning.
+The threshold is configurable, not a theorem about practical running time.
+Operation counts cannot justify hardware-specific timings or a universal
+safe size.
 
-The \texttt{threshold} parameter of \texttt{settle\_expenses()} controls when "auto" falls back:
+All methods settle valid inputs with positive integer amounts. Only the
+exact methods, and \texttt{auto} when selecting \texttt{exact2}, guarantee
+the minimum. Payment records use \texttt{sender}, \texttt{recipient}, and
+\texttt{amount}; no particular order of equally valid payments is promised.
 
-\[
-  \text{effective method} = \begin{cases}
-    \texttt{method} & \text{if } \texttt{method} \ne \texttt{"auto"} \\
-    \texttt{greedy} & \text{if } \texttt{method} = \texttt{"auto"} \text{ and } n > \texttt{threshold} \\
-    \texttt{exact2} & \text{if } \texttt{method} = \texttt{"auto"} \text{ and } n \leq \texttt{threshold}
-  \end{cases}
-\]
+\section{Source correspondence and validation}\label{sec:source}
+All functions below are in \path{settle_expenses.py}. The references are
+to explanatory sections rather than unstable source line numbers.
+\begin{longtable}{@{}p{0.66\textwidth}p{0.27\textwidth}@{}}
+\toprule Function & Description \\ \midrule\endhead
+\path{net_balances} & Section~\ref{sec:balances} \\
+\path{validate_expense}, \path{parse_csv} & Section~\ref{sec:balances} \\
+\path{_settle} & Section~\ref{sec:group} \\
+\path{_find_max_zero_sum_subsets_exact0} & Section~\ref{sec:exact0} \\
+\path{_find_max_zero_sum_subsets_exact1} & Section~\ref{sec:exact1} \\
+\path{_find_max_zero_sum_subsets_exact2} & Section~\ref{sec:exact2} \\
+\path{_find_max_zero_sum_subsets_heuristic} & Section~\ref{sec:heuristic} \\
+\path{_greedy_settle_balances} & Section~\ref{sec:greedy} \\
+\path{settle_expenses} & Section~\ref{sec:comparison} \\
+\bottomrule
+\end{longtable}
+Tests exercise empty and zero instances, excluded payers, uneven splits,
+validity, and known minimum counts. \path{tests/test_exact0.py} compares
+uncached exhaustive search with \texttt{exact1} on small cases.
+\path{tests/test_exact2.py} compares the cached exact methods on exhaustive
+small balance instances and randomized expenses.
+\path{tests/test_nonexact.py} contains the counterexamples above, greedy
+validity checks, and routing checks. Tests complement proofs; they do not
+exhaust all inputs or constitute runtime benchmarks.
 
-With default \texttt{threshold} $= 18$, \texttt{auto} uses \texttt{exact2}'s
-cached zero-sum prefix DP up to 18 non-zero balances, and emits a
-\texttt{UserWarning} when falling back to \texttt{greedy} above that threshold.
+\section{Research context and related work}\label{sec:literature}
+This is a selective account, not an exhaustive survey or a novelty claim.
+P\u{a}tca\c{s}~\cite{patcas2011} studies the same transaction-count
+objective, including dynamic input and exact approaches. Yao's senior
+thesis~\cite{yao2017} studies zero-sum set packing, complexity, and
+approximation; it is not a journal article.
 
+Fertin and coauthors' 2024 Maximum Zero-Sum Partition (MZSP)
+paper~\cite{fertin2024}, following a 2022 preliminary version, directly
+matches this partition objective. Multiset elements represent individual
+occurrences: people with equal balances remain distinct. A payment budget
+$K$ corresponds to at least $n-K$ blocks by Theorem~\ref{thm:optimum}.
+The associated decision problem is NP-complete and optimization is
+NP-hard. This does not prove a polynomial exact algorithm impossible,
+or $3^n$ time necessary; \texttt{exact2} improves on that bound.
+Approximation ratios for maximizing blocks do not transfer unchanged to
+minimizing payments; the valid translation here is
+$T-\operatorname{OPT}\leq c-\hat c$.
+
+P\u{a}tca\c{s} and Bartha~\cite{patcas2019} use evolutionary methods for
+the same debt-clearing objective. These are useful stochastic comparison
+candidates, but empirical results do not imply exactness. Evaluation
+should report repeated runs, computational budgets, and payment counts
+against exact small-instance results.
+
+Recent related works concern different objectives. Chen, Baron, and
+Chen~\cite{chen2025} study dynamic interbank clearing with timing and
+delay costs; the article appeared online in June 2024 and in the April
+2025 issue. Buchman and coauthors' \emph{Cycles Protocol}~\cite{buchman2025}
+is a July 2025 arXiv preprint, with a November 2024 manuscript version
+date, concerning peer-to-peer clearing, liquidity, and privacy. Neither
+establishes a better payment-count guarantee for this unrestricted static
+model. Liquidity, delay costs, and transaction counts require distinct
+assumptions and arguments.
+
+\begin{thebibliography}{9}
+\small
+\bibitem{buchman2025}
+Ethan Buchman, Paolo Dini, Shoaib Ahmed, Andrew Miller, and Toma\v{z} Fleischman.
+\emph{Cycles Protocol: A Peer-to-Peer Electronic Clearing System}.
+arXiv:2507.22309v1, 30 July 2025.
+\url{https://arxiv.org/abs/2507.22309v1}.
+\bibitem{chen2025}
+Shuzhen Chen, Opher Baron, and Ningyuan Chen.
+\emph{Optimal Dynamic Clearing for Interbank Payments}.
+Management Science, 71(4):2953--2974, 2025. Online 27 June 2024.
+\url{https://doi.org/10.1287/mnsc.2023.00380}.
+\bibitem{fertin2024}
+Guillaume Fertin, Oscar Fontaine, G\'{e}raldine Jean, and St\'{e}phane Vialette.
+\emph{The Maximum Zero-Sum Partition problem}.
+Theoretical Computer Science, 1019:114811, 1 December 2024.
+\url{https://doi.org/10.1016/j.tcs.2024.114811}.
+Author-deposited record: \url{https://hal.science/hal-04901397}.
+\bibitem{patcas2011}
+Csaba P\u{a}tca\c{s}. \emph{The debts' clearing problem: a new approach}.
+Acta Universitatis Sapientiae, Informatica, 3(2):192--204, 2011.
+\url{https://arxiv.org/abs/1111.3663}.
+\bibitem{patcas2019}
+Csaba P\u{a}tca\c{s} and Attila Bartha.
+\emph{Evolutionary solving of the debts' clearing problem}.
+Acta Universitatis Sapientiae, Informatica, 11(2):142--158, 2019.
+\url{https://doi.org/10.2478/ausi-2019-0010}.
+Earlier preprint: arXiv:1402.6556 (2014).
+\bibitem{atcoder2025}
+spheniscine. \emph{F---Candy Redistribution: Solution in O(N * 2\^{}N)}.
+Official editorial, AtCoder Beginner Contest 432, 2025.
+Programming-contest exposition.
+\url{https://atcoder.jp/contests/abc432/editorial/14584?lang=en}.
+\bibitem{yao2017}
+Y.~Yao. \emph{Settling Debts Efficiently: Zero-Sum Set Packing}.
+Senior thesis, Harvard University, 2017.
+\url{https://nrs.harvard.edu/urn-3:HUL.InstRepos:38811480}.
+\end{thebibliography}
 \end{document}
